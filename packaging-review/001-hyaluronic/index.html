@@ -65,6 +65,10 @@
         display: none;
       }
 
+      .distribution-only.is-hidden {
+        display: none;
+      }
+
       .app {
         display: grid;
         grid-template-rows: auto 1fr;
@@ -170,6 +174,19 @@
 
       .button.text {
         padding: 0 10px;
+      }
+
+      .button.submit-button {
+        min-width: 112px;
+        padding: 0 18px;
+        color: #ffffff;
+        background: #c51616;
+        font-weight: 850;
+        box-shadow: 0 8px 20px rgba(197, 22, 22, 0.22);
+      }
+
+      .button.submit-button:hover {
+        background: #a90f0f;
       }
 
       .button.icon {
@@ -593,6 +610,66 @@
         color: var(--muted);
       }
 
+      .confirm-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 40;
+        display: none;
+        place-items: center;
+        padding: 16px;
+        background: rgba(23, 23, 23, 0.48);
+      }
+
+      .confirm-modal.open {
+        display: grid;
+      }
+
+      .confirm-dialog {
+        width: min(420px, 100%);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 18px;
+        background: var(--panel);
+        box-shadow: 0 20px 54px rgba(24, 24, 24, 0.22);
+      }
+
+      .confirm-dialog strong {
+        display: block;
+        font-size: 18px;
+        line-height: 1.3;
+      }
+
+      .confirm-dialog p {
+        margin: 10px 0 16px;
+        color: #34322e;
+        font-size: 15px;
+        line-height: 1.5;
+      }
+
+      .confirm-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
+      .confirm-actions .button {
+        width: 100%;
+        height: 42px;
+        border: 1px solid var(--line);
+        background: #ffffff;
+      }
+
+      .confirm-actions .danger {
+        border-color: #c51616;
+        color: #ffffff;
+        background: #c51616;
+        font-weight: 850;
+      }
+
+      .confirm-actions .danger:hover {
+        background: #a90f0f;
+      }
+
       @media (max-width: 1080px) {
         body {
           overflow: auto;
@@ -692,6 +769,32 @@
           height: 26px;
           font-size: 13px;
         }
+
+        .button.submit-button {
+          width: 100%;
+          height: 46px;
+          min-height: 46px;
+          font-size: 16px;
+        }
+
+        .confirm-modal {
+          align-items: end;
+          padding: 12px;
+        }
+
+        .confirm-dialog {
+          width: 100%;
+          padding: 16px;
+        }
+
+        .confirm-actions {
+          grid-template-columns: 1fr;
+        }
+
+        .confirm-actions .button {
+          height: 46px;
+          font-size: 15px;
+        }
       }
     </style>
   </head>
@@ -706,6 +809,7 @@
             <span id="resultLabel">入选 0 / 待定 0 / 排除 0</span>
             <span class="voter-pill" id="voterLabel">主页面</span>
             <span id="usageLabel">使用次数：主页面设置</span>
+            <span id="submitLabel">提交：分发页确认</span>
             <span class="sync-state" id="syncLabel">连接服务器</span>
           </div>
         </div>
@@ -727,6 +831,7 @@
           <button class="button text" type="button" id="createVoterBtn">新增外发端</button>
           <button class="button text host-only" type="button" id="voterSettingsBtn">分发设置</button>
           <button class="button text" type="button" id="copyLinkBtn">复制本端链接</button>
+          <button class="button text submit-button distribution-only is-hidden" type="button" id="submitConfirmBtn">提交确认</button>
           <button class="button text host-only" type="button" id="addImageBtn">新增图片</button>
           <button class="button text" type="button" id="logBtn">日志</button>
           <button class="button text" type="button" id="exportBtn">导出全部</button>
@@ -757,6 +862,16 @@
       </div>
       <div class="voter-list" id="voterList"></div>
     </aside>
+    <div class="confirm-modal" id="submitModal" role="dialog" aria-modal="true" aria-labelledby="submitModalTitle">
+      <div class="confirm-dialog">
+        <strong id="submitModalTitle">提交确认</strong>
+        <p>是否已勾选确认所有选项</p>
+        <div class="confirm-actions">
+          <button class="button text" type="button" id="cancelSubmitBtn">取消</button>
+          <button class="button text danger" type="button" id="confirmSubmitBtn">确认提交</button>
+        </div>
+      </div>
+    </div>
 
     <script>
       const initialImages = [
@@ -800,6 +915,7 @@
       const voterSettingsUrl = "/api/packaging-review/voter-settings";
       let images = initialImages.slice();
       const voteUrl = "/api/packaging-review/vote";
+      const submitUrl = "/api/packaging-review/submit";
       const descriptionUrl = "/api/packaging-review/description";
       const imageUrl = "/api/packaging-review/image";
       const logsUrl = `/api/packaging-review/logs?project=${encodeURIComponent(projectId)}`;
@@ -814,6 +930,7 @@
         note: "留言",
         update: "更新",
         "update-voter-usage": "修改使用次数",
+        "submit-confirm": "提交确认",
         "image-description": "图片说明",
         "image-add": "新增图片",
         "image-replace": "替换图片",
@@ -846,6 +963,7 @@
       const resultLabel = document.querySelector("#resultLabel");
       const voterLabel = document.querySelector("#voterLabel");
       const usageLabel = document.querySelector("#usageLabel");
+      const submitLabel = document.querySelector("#submitLabel");
       const syncLabel = document.querySelector("#syncLabel");
       const pageLabel = document.querySelector("#pageLabel");
       const searchInput = document.querySelector("#searchInput");
@@ -854,6 +972,7 @@
       const createVoterBtn = document.querySelector("#createVoterBtn");
       const voterSettingsBtn = document.querySelector("#voterSettingsBtn");
       const copyLinkBtn = document.querySelector("#copyLinkBtn");
+      const submitConfirmBtn = document.querySelector("#submitConfirmBtn");
       const addImageBtn = document.querySelector("#addImageBtn");
       const addImageInput = document.querySelector("#addImageInput");
       const replaceImageInput = document.querySelector("#replaceImageInput");
@@ -867,6 +986,9 @@
       const voterPanel = document.querySelector("#voterPanel");
       const voterList = document.querySelector("#voterList");
       const closeVoterPanelBtn = document.querySelector("#closeVoterPanelBtn");
+      const submitModal = document.querySelector("#submitModal");
+      const cancelSubmitBtn = document.querySelector("#cancelSubmitBtn");
+      const confirmSubmitBtn = document.querySelector("#confirmSubmitBtn");
 
       function stateUrl() {
         const params = new URLSearchParams({ project: projectId });
@@ -887,6 +1009,10 @@
         return Boolean(voterId && currentVoter && hasUsageRemaining(currentVoter));
       }
 
+      function canSubmitConfirm() {
+        return Boolean(voterId && currentVoter);
+      }
+
       function hasUsageRemaining(voter) {
         const limit = usageLimitValue(voter);
         if (limit === null) return true;
@@ -905,6 +1031,13 @@
         return `使用次数：${used} / ${limit === null ? "不限" : limit}`;
       }
 
+      function submitText(voter) {
+        if (!voter) return voterId ? "提交：分发链接无效" : "提交：分发页确认";
+        const count = Number(voter.submitCount || 0);
+        if (!count) return "提交：未提交";
+        return `提交：已提交 ${count} 次${voter.submittedAt ? `（${formatTime(voter.submittedAt)}）` : ""}`;
+      }
+
       function parseUsageLimit(value) {
         const text = String(value || "").trim();
         if (!text) return null;
@@ -916,6 +1049,7 @@
       function syncHostControls() {
         addImageBtn.classList.toggle("is-hidden", !canManageImages());
         voterSettingsBtn.classList.toggle("is-hidden", !canManageImages());
+        submitConfirmBtn.classList.toggle("is-hidden", !canSubmitConfirm());
       }
 
       function mergeRemoteImages(remoteImages) {
@@ -960,6 +1094,9 @@
         usageLabel.textContent = currentVoter ? usageText(currentVoter) : "使用次数：主页面设置";
         usageLabel.classList.toggle("sync-state", Boolean(currentVoter));
         usageLabel.classList.toggle("error", Boolean(currentVoter && !hasUsageRemaining(currentVoter)));
+        submitLabel.textContent = submitText(currentVoter);
+        submitLabel.classList.toggle("sync-state", Boolean(currentVoter?.submitCount));
+        submitLabel.classList.toggle("error", Boolean(voterId && !currentVoter));
       }
 
       function setMark(file, value) {
@@ -1127,6 +1264,45 @@
           }
         }
         window.prompt("复制链接", text);
+      }
+
+      function openSubmitModal() {
+        if (!canSubmitConfirm()) {
+          setSyncLabel(voterId ? "分发链接无效，无法提交确认" : "主页面不需要提交确认", true);
+          return;
+        }
+        submitModal.classList.add("open");
+        confirmSubmitBtn.focus();
+      }
+
+      function closeSubmitModal() {
+        submitModal.classList.remove("open");
+      }
+
+      async function confirmSubmit() {
+        if (!canSubmitConfirm()) {
+          closeSubmitModal();
+          setSyncLabel("分发链接无效，无法提交确认", true);
+          return;
+        }
+        try {
+          confirmSubmitBtn.disabled = true;
+          setSyncLabel("提交确认中");
+          const response = await fetch(submitUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ project: projectId, voter: voterId }),
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+          applyRemoteState(payload, true);
+          closeSubmitModal();
+          setSyncLabel("已提交确认");
+        } catch (error) {
+          setSyncLabel(error.message || "提交确认失败", true);
+        } finally {
+          confirmSubmitBtn.disabled = false;
+        }
       }
 
       async function addImages(files) {
@@ -1553,6 +1729,8 @@
             "已用次数",
             "使用上限",
             "剩余次数",
+            "提交次数",
+            "最后提交时间",
             "入选数",
             "待定数",
             "排除数",
@@ -1616,6 +1794,7 @@
           ["项目", projectId],
           ["图片总数", images.length],
           ["外发端总数", voters.length],
+          ["已提交外发端数", voters.filter((voter) => Number(voter.submitCount || 0) > 0).length],
           ["入选总票数", totals.keep],
           ["待定总票数", totals.hold],
           ["排除总票数", totals.out],
@@ -1652,6 +1831,8 @@
             used,
             limit === null ? "不限" : limit,
             limit === null ? "不限" : Math.max(0, limit - used),
+            Number(voter.submitCount || 0),
+            voter.submittedAt || "",
             counts.keep,
             counts.hold,
             counts.out,
@@ -1805,6 +1986,12 @@
       createVoterBtn.addEventListener("click", createVoter);
       voterSettingsBtn.addEventListener("click", openVoterPanel);
       copyLinkBtn.addEventListener("click", copyCurrentLink);
+      submitConfirmBtn.addEventListener("click", openSubmitModal);
+      cancelSubmitBtn.addEventListener("click", closeSubmitModal);
+      confirmSubmitBtn.addEventListener("click", confirmSubmit);
+      submitModal.addEventListener("click", (event) => {
+        if (event.target === submitModal) closeSubmitModal();
+      });
       addImageBtn.addEventListener("click", () => addImageInput.click());
       addImageInput.addEventListener("change", () => addImages(Array.from(addImageInput.files || [])));
       replaceImageInput.addEventListener("change", () => replaceImage(pendingReplaceFile, replaceImageInput.files?.[0]));
@@ -1830,6 +2017,10 @@
       });
 
       window.addEventListener("keydown", (event) => {
+        if (submitModal.classList.contains("open")) {
+          if (event.key === "Escape") closeSubmitModal();
+          return;
+        }
         if (event.key === "ArrowLeft") prevBtn.click();
         if (event.key === "ArrowRight" || event.key === " ") nextBtn.click();
         if (event.key.toLowerCase() === "f") fullBtn.click();

@@ -87,6 +87,10 @@ createServer(async (req, res) => {
       await handlePackagingReviewVote(req, res);
       return;
     }
+    if (req.method === "POST" && url.pathname === "/api/packaging-review/submit") {
+      await handlePackagingReviewSubmit(req, res);
+      return;
+    }
     if (req.method === "POST" && url.pathname === "/api/packaging-review/description") {
       await handlePackagingReviewDescription(req, res);
       return;
@@ -241,6 +245,8 @@ async function handlePackagingReviewVoter(req, res) {
     name,
     usageLimit: normalizeUsageLimit(body.usageLimit),
     voteClickCount: 0,
+    submitCount: 0,
+    submittedAt: "",
     createdAt: now,
     updatedAt: now,
   };
@@ -370,6 +376,38 @@ async function handlePackagingReviewVote(req, res) {
     note,
     previousMark,
     previousNote,
+  });
+  writePackagingReviewState(state);
+  sendJson(res, 200, buildReviewPayload(project, state, { voterId }));
+}
+
+async function handlePackagingReviewSubmit(req, res) {
+  const body = await readJsonBody(req, 64 * 1024);
+  const project = normalizeReviewProject(body.project);
+  const voterId = normalizeVoterId(body.voter);
+  if (!voterId) {
+    sendJson(res, 400, { ok: false, error: "Invalid voter." });
+    return;
+  }
+
+  const state = readPackagingReviewState();
+  const projectState = getReviewProjectState(state, project);
+  const voter = projectState.voters[voterId];
+  if (!voter) {
+    sendJson(res, 404, { ok: false, error: "Voter not found." });
+    return;
+  }
+
+  const now = new Date().toISOString();
+  voter.submitCount = Math.max(0, Math.floor(Number(voter.submitCount || 0))) + 1;
+  voter.submittedAt = now;
+  voter.updatedAt = now;
+  projectState.updatedAt = now;
+  appendReviewEvent(projectState, {
+    action: "submit-confirm",
+    voterId,
+    voterName: voter.name,
+    note: "确认所有选项",
   });
   writePackagingReviewState(state);
   sendJson(res, 200, buildReviewPayload(project, state, { voterId }));
@@ -699,6 +737,8 @@ function getReviewProjectState(state, project) {
   Object.values(projectState.voters).forEach((voter) => {
     voter.usageLimit = normalizeUsageLimit(voter.usageLimit);
     voter.voteClickCount = Math.max(0, Math.floor(Number(voter.voteClickCount || 0)));
+    voter.submitCount = Math.max(0, Math.floor(Number(voter.submitCount || 0)));
+    voter.submittedAt = typeof voter.submittedAt === "string" ? voter.submittedAt : "";
   });
 
   if (projectState.items && typeof projectState.items === "object" && Object.keys(projectState.items).length) {
@@ -709,6 +749,8 @@ function getReviewProjectState(state, project) {
         name: "历史同步结果",
         usageLimit: null,
         voteClickCount: 0,
+        submitCount: 0,
+        submittedAt: "",
         createdAt: projectState.updatedAt || new Date().toISOString(),
         updatedAt: projectState.updatedAt || new Date().toISOString(),
       };
