@@ -52,6 +52,14 @@
         font: inherit;
       }
 
+      .file-input {
+        display: none;
+      }
+
+      .host-only.is-hidden {
+        display: none;
+      }
+
       .app {
         display: grid;
         grid-template-rows: auto 1fr;
@@ -281,7 +289,6 @@
       .caption {
         display: grid;
         grid-template-columns: 1fr auto;
-        grid-template-rows: auto auto;
         gap: 8px;
         align-items: center;
         min-height: 86px;
@@ -305,6 +312,26 @@
         display: grid;
         grid-template-columns: repeat(3, 28px);
         gap: 4px;
+      }
+
+      .image-admin {
+        grid-column: 1 / -1;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 4px;
+      }
+
+      .image-admin .button {
+        width: 100%;
+        height: 28px;
+        min-width: 0;
+        border: 1px solid var(--line);
+        background: #ffffff;
+        font-size: 12px;
+      }
+
+      .image-admin .button.danger {
+        color: var(--out);
       }
 
       .vote-summary {
@@ -550,6 +577,7 @@
           </div>
           <button class="button text" type="button" id="createVoterBtn">新增外发端</button>
           <button class="button text" type="button" id="copyLinkBtn">复制本端链接</button>
+          <button class="button text host-only" type="button" id="addImageBtn">新增图片</button>
           <button class="button text" type="button" id="logBtn">日志</button>
           <button class="button text" type="button" id="exportBtn">导出</button>
           <button class="button text" type="button" id="fullBtn">全屏</button>
@@ -557,6 +585,8 @@
       </header>
       <section class="stage" id="stage" aria-label="包装图片展示"></section>
       <section class="empty" id="empty">没有匹配的图片</section>
+      <input class="file-input" id="addImageInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple />
+      <input class="file-input" id="replaceImageInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" />
     </main>
     <aside class="log-panel" id="logPanel" aria-label="投票日志">
       <div class="log-head">
@@ -570,7 +600,7 @@
     </aside>
 
     <script>
-      const images = [
+      const initialImages = [
         "水膜001结构.png",
         "水膜001.png",
         "水感膜结构.png",
@@ -608,7 +638,9 @@
       const pageSize = 10;
       const projectId = "001-hyaluronic";
       const voterUrl = "/api/packaging-review/voter";
+      let images = initialImages.slice();
       const voteUrl = "/api/packaging-review/vote";
+      const imageUrl = "/api/packaging-review/image";
       const logsUrl = `/api/packaging-review/logs?project=${encodeURIComponent(projectId)}`;
       const syncIntervalMs = 2500;
       const labels = { keep: "入选", hold: "待定", out: "排除" };
@@ -619,6 +651,10 @@
         cancel: "取消",
         note: "留言",
         update: "更新",
+        "image-add": "新增图片",
+        "image-replace": "替换图片",
+        "image-rename": "修改图片",
+        "image-delete": "删除图片",
       };
       const urlParams = new URLSearchParams(window.location.search);
       let voterId = urlParams.get("voter") || "";
@@ -634,6 +670,8 @@
       let recentEvents = [];
       let allEvents = [];
       let noteTimers = new Map();
+      let imageCacheBust = "";
+      let pendingReplaceFile = "";
 
       const stage = document.querySelector("#stage");
       const empty = document.querySelector("#empty");
@@ -647,6 +685,9 @@
       const nextBtn = document.querySelector("#nextBtn");
       const createVoterBtn = document.querySelector("#createVoterBtn");
       const copyLinkBtn = document.querySelector("#copyLinkBtn");
+      const addImageBtn = document.querySelector("#addImageBtn");
+      const addImageInput = document.querySelector("#addImageInput");
+      const replaceImageInput = document.querySelector("#replaceImageInput");
       const logBtn = document.querySelector("#logBtn");
       const exportBtn = document.querySelector("#exportBtn");
       const fullBtn = document.querySelector("#fullBtn");
@@ -664,6 +705,23 @@
       function setSyncLabel(text, isError = false) {
         syncLabel.textContent = text;
         syncLabel.classList.toggle("error", isError);
+      }
+
+      function canManageImages() {
+        return !voterId;
+      }
+
+      function syncHostControls() {
+        addImageBtn.classList.toggle("is-hidden", !canManageImages());
+      }
+
+      function mergeRemoteImages(remoteImages) {
+        if (!Array.isArray(remoteImages)) return;
+        const remoteSet = new Set(remoteImages);
+        images = images.filter((file) => remoteSet.has(file));
+        remoteImages.forEach((file) => {
+          if (!images.includes(file)) images.push(file);
+        });
       }
 
       function getFilteredImages() {
@@ -737,11 +795,13 @@
         const focusedValue = focusedFile ? document.activeElement.value : "";
         const nextMarks = {};
         const nextNotes = {};
+        mergeRemoteImages(payload.images || []);
         summaries = payload.summaries || {};
         allVotes = payload.votes || {};
         voters = Array.isArray(payload.voters) ? payload.voters : [];
         currentVoter = payload.voter || null;
         recentEvents = Array.isArray(payload.recentEvents) ? payload.recentEvents : [];
+        imageCacheBust = payload.updatedAt || imageCacheBust;
         Object.entries(payload.currentVotes || {}).forEach(([file, item]) => {
           if (item.mark) nextMarks[file] = item.mark;
           if (item.note) nextNotes[file] = item.note;
@@ -754,6 +814,7 @@
         } else {
           updateSummary();
         }
+        syncHostControls();
         renderLogs();
       }
 
@@ -812,6 +873,110 @@
           }
         }
         window.prompt("复制链接", text);
+      }
+
+      async function addImages(files) {
+        if (!canManageImages() || !files.length) return;
+        try {
+          setSyncLabel("上传图片中");
+          for (const file of files) {
+            const dataUrl = await readFileAsDataUrl(file);
+            const payload = await sendImageRequest({
+              action: "add",
+              name: file.name,
+              dataUrl,
+            });
+            applyRemoteState(payload, false);
+          }
+          allEvents = [];
+          await loadRemoteState({ silent: true });
+          setSyncLabel("图片已新增");
+        } catch (error) {
+          setSyncLabel(error.message || "新增图片失败", true);
+        } finally {
+          addImageInput.value = "";
+        }
+      }
+
+      async function replaceImage(file, selectedFile) {
+        if (!canManageImages() || !file || !selectedFile) return;
+        try {
+          setSyncLabel("替换图片中");
+          const dataUrl = await readFileAsDataUrl(selectedFile);
+          const payload = await sendImageRequest({
+            action: "replace",
+            file,
+            dataUrl,
+          });
+          allEvents = [];
+          applyRemoteState(payload, true);
+          setSyncLabel("图片已替换");
+        } catch (error) {
+          setSyncLabel(error.message || "替换图片失败", true);
+        } finally {
+          replaceImageInput.value = "";
+          pendingReplaceFile = "";
+        }
+      }
+
+      async function renameImage(file) {
+        if (!canManageImages()) return;
+        const name = window.prompt("图片文件名", file);
+        if (name === null) return;
+        try {
+          setSyncLabel("修改图片中");
+          const payload = await sendImageRequest({
+            action: "rename",
+            file,
+            name,
+          });
+          allEvents = [];
+          applyRemoteState(payload, true);
+          setSyncLabel("图片名称已修改");
+        } catch (error) {
+          setSyncLabel(error.message || "修改图片失败", true);
+        }
+      }
+
+      async function deleteImage(file) {
+        if (!canManageImages()) return;
+        if (!window.confirm(`确认删除图片：${file}？删除后这张图的投票也会清理。`)) return;
+        try {
+          setSyncLabel("删除图片中");
+          const payload = await sendImageRequest({
+            action: "delete",
+            file,
+          });
+          allEvents = [];
+          applyRemoteState(payload, true);
+          setSyncLabel("图片已删除");
+        } catch (error) {
+          setSyncLabel(error.message || "删除图片失败", true);
+        }
+      }
+
+      async function sendImageRequest(body) {
+        const response = await fetch(imageUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ project: projectId, ...body }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+        return payload;
+      }
+
+      function readFileAsDataUrl(file) {
+        return new Promise((resolve, reject) => {
+          if (!file.type.startsWith("image/")) {
+            reject(new Error("请选择图片文件。"));
+            return;
+          }
+          const reader = new FileReader();
+          reader.addEventListener("load", () => resolve(String(reader.result || "")));
+          reader.addEventListener("error", () => reject(new Error("读取图片失败。")));
+          reader.readAsDataURL(file);
+        });
       }
 
       async function syncVote(file) {
@@ -881,7 +1046,7 @@
           imageWrap.className = "image-wrap";
 
           const img = document.createElement("img");
-          img.src = encodeURI(`images/${item.file}`);
+          img.src = `${encodeURI(`images/${item.file}`)}${imageCacheBust ? `?v=${encodeURIComponent(imageCacheBust)}` : ""}`;
           img.alt = item.file;
           img.loading = "eager";
           img.decoding = "async";
@@ -924,6 +1089,29 @@
             actions.append(button);
           });
 
+          const imageAdmin = document.createElement("div");
+          imageAdmin.className = "image-admin";
+          if (canManageImages()) {
+            [
+              ["替换", () => {
+                pendingReplaceFile = item.file;
+                replaceImageInput.click();
+              }],
+              ["改名", () => renameImage(item.file)],
+              ["删除", () => deleteImage(item.file), "danger"],
+            ].forEach(([text, handler, tone]) => {
+              const button = document.createElement("button");
+              button.className = `button text${tone ? ` ${tone}` : ""}`;
+              button.type = "button";
+              button.textContent = text;
+              button.addEventListener("click", (event) => {
+                event.stopPropagation();
+                handler();
+              });
+              imageAdmin.append(button);
+            });
+          }
+
           const voteSummary = document.createElement("div");
           voteSummary.className = "vote-summary";
           voteSummary.innerHTML = `<span>入选 ${summary.keep || 0}</span><span>待定 ${summary.hold || 0}</span><span>排除 ${summary.out || 0}</span>`;
@@ -942,7 +1130,9 @@
           noteInput.addEventListener("blur", () => syncVote(item.file));
 
           tile.addEventListener("dblclick", () => window.open(encodeURI(`images/${item.file}`), "_blank"));
-          caption.append(filename, actions, voteSummary, noteInput);
+          caption.append(filename, actions);
+          if (canManageImages()) caption.append(imageAdmin);
+          caption.append(voteSummary, noteInput);
           tile.append(imageWrap, number, status, caption);
           stage.append(tile);
         });
@@ -967,13 +1157,14 @@
 
       function exportLogs() {
         const events = allEvents.length ? allEvents.slice().reverse() : recentEvents.slice().reverse();
-        const rows = [["时间", "外发端", "图片序号", "文件名", "操作", "筛选结果", "留言", "原筛选结果", "原留言"]];
+        const rows = [["时间", "操作者", "图片序号", "文件名", "新文件名", "操作", "筛选结果", "留言", "原筛选结果", "原留言"]];
         events.forEach((event) => {
           rows.push([
             event.at || "",
-            event.voterName || voterName(event.voterId),
+            eventActor(event),
             imageNumber(event.file),
             event.file || "",
+            event.nextFile || "",
             actionLabels[event.action] || event.action || "",
             labels[event.mark] || "",
             event.note || "",
@@ -1006,11 +1197,15 @@
           row.className = "log-row";
           row.innerHTML = `
             <span class="muted">${formatTime(event.at)}</span>
-            <strong>${event.voterName || voterName(event.voterId)}</strong>
-            <span>${imageNumber(event.file)} ${event.file || ""}<br><span class="muted">${actionLabels[event.action] || event.action || ""} ${labels[event.mark] || ""} ${event.note || ""}</span></span>
+            <strong>${eventActor(event)}</strong>
+            <span>${imageNumber(event.file)} ${event.file || ""}${event.nextFile ? ` → ${event.nextFile}` : ""}<br><span class="muted">${actionLabels[event.action] || event.action || ""} ${labels[event.mark] || ""} ${event.note || ""}</span></span>
           `;
           logList.append(row);
         });
+      }
+
+      function eventActor(event) {
+        return event.voterName || voterName(event.voterId) || "图片管理";
       }
 
       function voterName(rowVoterId) {
@@ -1055,6 +1250,9 @@
 
       createVoterBtn.addEventListener("click", createVoter);
       copyLinkBtn.addEventListener("click", copyCurrentLink);
+      addImageBtn.addEventListener("click", () => addImageInput.click());
+      addImageInput.addEventListener("change", () => addImages(Array.from(addImageInput.files || [])));
+      replaceImageInput.addEventListener("change", () => replaceImage(pendingReplaceFile, replaceImageInput.files?.[0]));
       logBtn.addEventListener("click", openLogs);
       closeLogBtn.addEventListener("click", () => logPanel.classList.remove("open"));
       exportBtn.addEventListener("click", exportCsv);
@@ -1081,6 +1279,7 @@
         if (event.key.toLowerCase() === "f") fullBtn.click();
       });
 
+      syncHostControls();
       render();
       loadRemoteState();
       window.setInterval(() => loadRemoteState({ silent: true }), syncIntervalMs);

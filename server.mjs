@@ -1,5 +1,15 @@
 import { createServer } from "node:http";
-import { createReadStream, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import {
+  createReadStream,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { extname, join, normalize, resolve } from "node:path";
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
@@ -28,6 +38,10 @@ const MIME_TYPES = {
   ".mjs": "text/javascript; charset=utf-8",
   ".svg": "image/svg+xml",
   ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".gif": "image/gif",
   ".json": "application/json; charset=utf-8",
   ".webmanifest": "application/manifest+json; charset=utf-8",
   ".txt": "text/plain; charset=utf-8",
@@ -67,6 +81,10 @@ createServer(async (req, res) => {
     }
     if (req.method === "POST" && url.pathname === "/api/packaging-review/vote") {
       await handlePackagingReviewVote(req, res);
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/packaging-review/image") {
+      await handlePackagingReviewImage(req, res);
       return;
     }
     if (req.method === "GET" && url.pathname === "/api/packaging-review/logs") {
@@ -310,6 +328,168 @@ function handlePackagingReviewLogs(url, res) {
   });
 }
 
+async function handlePackagingReviewImage(req, res) {
+  const body = await readJsonBody(req, 32 * 1024 * 1024);
+  const action = String(body.action || "").trim();
+  const project = normalizeReviewProject(body.project);
+
+  if (action === "add") {
+    handlePackagingReviewImageAdd(project, body, res);
+    return;
+  }
+  if (action === "replace") {
+    handlePackagingReviewImageReplace(project, body, res);
+    return;
+  }
+  if (action === "rename") {
+    handlePackagingReviewImageRename(project, body, res);
+    return;
+  }
+  if (action === "delete") {
+    handlePackagingReviewImageDelete(project, body, res);
+    return;
+  }
+
+  sendJson(res, 400, { ok: false, error: "Invalid image action." });
+}
+
+function handlePackagingReviewImageAdd(project, body, res) {
+  const image = parseReviewImageDataUrl(body.dataUrl);
+  if (!image.ok) {
+    sendJson(res, 400, { ok: false, error: image.error });
+    return;
+  }
+
+  const imagesDir = ensureReviewImagesDir(project);
+  const requestedName = normalizeReviewImageName(body.name, image.ext);
+  const file = createUniqueReviewImageName(imagesDir, requestedName);
+  writeFileSync(getReviewImagePath(project, file), image.buffer);
+
+  const state = readPackagingReviewState();
+  const projectState = getReviewProjectState(state, project);
+  projectState.updatedAt = new Date().toISOString();
+  appendReviewEvent(projectState, {
+    action: "image-add",
+    file,
+    note: "新增图片",
+  });
+  writePackagingReviewState(state);
+  sendJson(res, 200, buildReviewPayload(project, state));
+}
+
+function handlePackagingReviewImageReplace(project, body, res) {
+  const file = normalizeReviewFile(body.file);
+  if (!file) {
+    sendJson(res, 400, { ok: false, error: "Invalid file." });
+    return;
+  }
+  const targetPath = getReviewImagePath(project, file);
+  if (!existsSync(targetPath)) {
+    sendJson(res, 404, { ok: false, error: "Image not found." });
+    return;
+  }
+
+  const image = parseReviewImageDataUrl(body.dataUrl);
+  if (!image.ok) {
+    sendJson(res, 400, { ok: false, error: image.error });
+    return;
+  }
+  if (!isSameReviewImageExtension(extname(file).toLowerCase(), image.ext)) {
+    sendJson(res, 400, { ok: false, error: "替换图片需保持同一格式。" });
+    return;
+  }
+
+  const tempPath = `${targetPath}.${process.pid}.tmp`;
+  writeFileSync(tempPath, image.buffer);
+  renameSync(tempPath, targetPath);
+
+  const state = readPackagingReviewState();
+  const projectState = getReviewProjectState(state, project);
+  projectState.updatedAt = new Date().toISOString();
+  appendReviewEvent(projectState, {
+    action: "image-replace",
+    file,
+    note: "替换图片",
+  });
+  writePackagingReviewState(state);
+  sendJson(res, 200, buildReviewPayload(project, state));
+}
+
+function handlePackagingReviewImageRename(project, body, res) {
+  const file = normalizeReviewFile(body.file);
+  if (!file) {
+    sendJson(res, 400, { ok: false, error: "Invalid file." });
+    return;
+  }
+  const sourcePath = getReviewImagePath(project, file);
+  if (!existsSync(sourcePath)) {
+    sendJson(res, 404, { ok: false, error: "Image not found." });
+    return;
+  }
+
+  const nextFile = normalizeReviewImageName(body.name, extname(file).toLowerCase());
+  if (!nextFile) {
+    sendJson(res, 400, { ok: false, error: "Invalid image name." });
+    return;
+  }
+  if (file === nextFile) {
+    const state = readPackagingReviewState();
+    sendJson(res, 200, buildReviewPayload(project, state));
+    return;
+  }
+
+  const targetPath = getReviewImagePath(project, nextFile);
+  if (existsSync(targetPath)) {
+    sendJson(res, 409, { ok: false, error: "同名图片已存在。" });
+    return;
+  }
+
+  renameSync(sourcePath, targetPath);
+
+  const state = readPackagingReviewState();
+  const projectState = getReviewProjectState(state, project);
+  if (projectState.votes[file]) {
+    projectState.votes[nextFile] = projectState.votes[file];
+    delete projectState.votes[file];
+  }
+  projectState.updatedAt = new Date().toISOString();
+  appendReviewEvent(projectState, {
+    action: "image-rename",
+    file,
+    nextFile,
+    note: "修改图片名称",
+  });
+  writePackagingReviewState(state);
+  sendJson(res, 200, buildReviewPayload(project, state));
+}
+
+function handlePackagingReviewImageDelete(project, body, res) {
+  const file = normalizeReviewFile(body.file);
+  if (!file) {
+    sendJson(res, 400, { ok: false, error: "Invalid file." });
+    return;
+  }
+  const imagePath = getReviewImagePath(project, file);
+  if (!existsSync(imagePath)) {
+    sendJson(res, 404, { ok: false, error: "Image not found." });
+    return;
+  }
+
+  const state = readPackagingReviewState();
+  const projectState = getReviewProjectState(state, project);
+  const removedVotes = Object.keys(projectState.votes[file] || {}).length;
+  unlinkSync(imagePath);
+  delete projectState.votes[file];
+  projectState.updatedAt = new Date().toISOString();
+  appendReviewEvent(projectState, {
+    action: "image-delete",
+    file,
+    note: removedVotes ? `删除图片，清理 ${removedVotes} 条投票` : "删除图片",
+  });
+  writePackagingReviewState(state);
+  sendJson(res, 200, buildReviewPayload(project, state));
+}
+
 function normalizeReviewProject(value) {
   const project = String(value || "001-hyaluronic").trim();
   return /^[a-z0-9][a-z0-9-]{0,80}$/i.test(project) ? project : "001-hyaluronic";
@@ -322,8 +502,37 @@ function normalizeVoterId(value) {
 
 function normalizeReviewFile(value) {
   const file = String(value || "").trim();
-  if (!file || file.includes("/") || file.includes("\\") || !file.toLowerCase().endsWith(".png")) return "";
+  if (!file || file.includes("/") || file.includes("\\") || !isAllowedReviewImageExt(extname(file).toLowerCase())) {
+    return "";
+  }
   return file.slice(0, 240);
+}
+
+function normalizeReviewImageName(value, fallbackExtension = ".png") {
+  const fallback = isAllowedReviewImageExt(fallbackExtension) ? fallbackExtension : ".png";
+  const raw = String(value || "")
+    .replace(/[<>:"|?*\x00-\x1f]/g, " ")
+    .replace(/[\\/]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 220);
+  let extension = extname(raw).toLowerCase();
+  let base = extension ? raw.slice(0, -extension.length) : raw;
+  if (!isAllowedReviewImageExt(extension)) {
+    extension = fallback;
+    base = raw.replace(/\.[^.]+$/, "");
+  }
+  base = base.replace(/\.+$/g, "").trim().slice(0, 170) || `image-${Date.now()}`;
+  return `${base}${extension}`;
+}
+
+function isAllowedReviewImageExt(extension) {
+  return [".png", ".jpg", ".jpeg", ".webp", ".gif"].includes(String(extension || "").toLowerCase());
+}
+
+function isSameReviewImageExtension(left, right) {
+  const normalize = (extension) => (extension === ".jpeg" ? ".jpg" : extension);
+  return normalize(left) === normalize(right);
 }
 
 function normalizeReviewMark(value) {
@@ -396,6 +605,7 @@ function buildReviewPayload(project, state, options = {}) {
   return {
     ok: true,
     project,
+    images: listReviewImages(project),
     updatedAt: projectState.updatedAt,
     voter: voterId && projectState.voters[voterId] ? projectState.voters[voterId] : null,
     voters: Object.values(projectState.voters),
@@ -404,6 +614,97 @@ function buildReviewPayload(project, state, options = {}) {
     currentVotes: buildCurrentVotes(projectState.votes, voterId),
     recentEvents: (projectState.events || []).slice(-120).reverse(),
   };
+}
+
+function listReviewImages(project) {
+  const imagesDir = getReviewImagesDir(project);
+  if (!existsSync(imagesDir)) return [];
+  try {
+    return readdirSync(imagesDir)
+      .filter((name) => /\.(png|jpe?g|webp|gif|svg)$/i.test(name))
+      .sort((left, right) => left.localeCompare(right, "zh-CN"));
+  } catch {
+    return [];
+  }
+}
+
+function getReviewImagesDir(project) {
+  return resolve(ROOT, "packaging-review", project, "images");
+}
+
+function ensureReviewImagesDir(project) {
+  const imagesDir = getReviewImagesDir(project);
+  mkdirSync(imagesDir, { recursive: true });
+  return imagesDir;
+}
+
+function getReviewImagePath(project, file) {
+  const imagesDir = getReviewImagesDir(project);
+  const imagePath = resolve(imagesDir, file);
+  if (!imagePath.startsWith(imagesDir)) throw new Error("Invalid image path.");
+  return imagePath;
+}
+
+function createUniqueReviewImageName(imagesDir, requestedName) {
+  const extension = extname(requestedName).toLowerCase();
+  const base = requestedName.slice(0, -extension.length);
+  let name = requestedName;
+  let index = 1;
+  while (existsSync(resolve(imagesDir, name))) {
+    name = `${base}-${index}${extension}`;
+    index += 1;
+  }
+  return name;
+}
+
+function parseReviewImageDataUrl(value) {
+  const match = String(value || "").match(/^data:(image\/png|image\/jpeg|image\/webp|image\/gif);base64,([a-z0-9+/=\s]+)$/i);
+  if (!match) return { ok: false, error: "Invalid image data." };
+
+  const mime = match[1].toLowerCase();
+  const buffer = Buffer.from(match[2].replace(/\s+/g, ""), "base64");
+  if (!buffer.length || buffer.length > 18 * 1024 * 1024) {
+    return { ok: false, error: "图片大小不能超过 18MB。" };
+  }
+
+  const extensionByMime = {
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+  };
+  const ext = extensionByMime[mime];
+  if (!hasValidImageSignature(buffer, ext)) {
+    return { ok: false, error: "图片格式校验失败。" };
+  }
+  return { ok: true, buffer, ext };
+}
+
+function hasValidImageSignature(buffer, extension) {
+  if (extension === ".png") {
+    return (
+      buffer.length > 8 &&
+      buffer[0] === 0x89 &&
+      buffer[1] === 0x50 &&
+      buffer[2] === 0x4e &&
+      buffer[3] === 0x47 &&
+      buffer[4] === 0x0d &&
+      buffer[5] === 0x0a &&
+      buffer[6] === 0x1a &&
+      buffer[7] === 0x0a
+    );
+  }
+  if (extension === ".jpg" || extension === ".jpeg") {
+    return buffer.length > 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[buffer.length - 2] === 0xff && buffer[buffer.length - 1] === 0xd9;
+  }
+  if (extension === ".webp") {
+    return buffer.length > 12 && buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP";
+  }
+  if (extension === ".gif") {
+    const signature = buffer.subarray(0, 6).toString("ascii");
+    return signature === "GIF87a" || signature === "GIF89a";
+  }
+  return false;
 }
 
 function buildVoteSummaries(votes) {
