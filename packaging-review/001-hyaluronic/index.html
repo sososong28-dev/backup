@@ -180,6 +180,19 @@
         background: var(--panel);
       }
 
+      .pager {
+        height: 50px;
+        gap: 8px;
+        padding: 5px;
+        border-color: rgba(15, 118, 110, 0.34);
+        box-shadow: 0 8px 20px rgba(15, 118, 110, 0.1);
+      }
+
+      .layout-toggle {
+        height: 42px;
+        border-color: rgba(15, 118, 110, 0.24);
+      }
+
       .searchbox {
         width: 220px;
         padding-inline: 10px;
@@ -237,10 +250,41 @@
         line-height: 1;
       }
 
+      .pager .button.icon {
+        width: 48px;
+        min-width: 48px;
+        height: 40px;
+        border-radius: 7px;
+        color: #ffffff;
+        background: var(--accent);
+        font-size: 34px;
+        font-weight: 850;
+        line-height: 1;
+        box-shadow: 0 7px 16px rgba(15, 118, 110, 0.2);
+      }
+
+      .pager .button.icon:hover {
+        background: #0b5f59;
+      }
+
+      .pager .button.icon:disabled {
+        cursor: not-allowed;
+        opacity: 0.38;
+        box-shadow: none;
+      }
+
+      .layout-toggle .button.text {
+        min-width: 56px;
+        height: 32px;
+        font-size: 14px;
+        font-weight: 800;
+      }
+
       .page-label {
-        min-width: 70px;
+        min-width: 82px;
         color: var(--muted);
-        font-size: 13px;
+        font-size: 15px;
+        font-weight: 800;
         text-align: center;
       }
 
@@ -811,6 +855,22 @@
           justify-content: space-between;
         }
 
+        .pager {
+          height: 56px;
+        }
+
+        .pager .button.icon {
+          width: 56px;
+          min-width: 56px;
+          height: 46px;
+          font-size: 38px;
+        }
+
+        .page-label {
+          min-width: 96px;
+          font-size: 16px;
+        }
+
         .stage.layout-2x5,
         .stage.layout-1x2 {
           grid-template-columns: 1fr;
@@ -917,7 +977,7 @@
             <button class="button text" type="button" data-filter="hold">待定</button>
             <button class="button text" type="button" data-filter="out">排除</button>
           </div>
-          <div class="segmented" role="tablist" aria-label="页面布局">
+          <div class="segmented layout-toggle" role="tablist" aria-label="页面布局">
             <button class="button text" type="button" data-layout="1x2">1×2</button>
             <button class="button text active" type="button" data-layout="2x5">2×5</button>
           </div>
