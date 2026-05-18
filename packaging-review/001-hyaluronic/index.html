@@ -359,6 +359,41 @@
         background: rgba(255, 255, 255, 0.74);
       }
 
+      .image-description {
+        grid-column: 1 / -1;
+        min-width: 0;
+        color: #3e3b35;
+        font-size: 12px;
+        line-height: 1.35;
+      }
+
+      .description-input {
+        grid-column: 1 / -1;
+        width: 100%;
+        height: 32px;
+        min-width: 0;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 0 9px;
+        outline: 0;
+        color: var(--ink);
+        background: #ffffff;
+        font-size: 12px;
+      }
+
+      .description-input:focus {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.16);
+      }
+
+      .description-readonly {
+        min-height: 22px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 5px 7px;
+        background: rgba(255, 255, 255, 0.74);
+      }
+
       .voter-pill {
         color: var(--accent);
         font-weight: 700;
@@ -648,6 +683,11 @@
           font-size: 14px;
         }
 
+        .description-input {
+          height: 40px;
+          font-size: 14px;
+        }
+
         .vote-summary span {
           height: 26px;
           font-size: 13px;
@@ -760,6 +800,7 @@
       const voterSettingsUrl = "/api/packaging-review/voter-settings";
       let images = initialImages.slice();
       const voteUrl = "/api/packaging-review/vote";
+      const descriptionUrl = "/api/packaging-review/description";
       const imageUrl = "/api/packaging-review/image";
       const logsUrl = `/api/packaging-review/logs?project=${encodeURIComponent(projectId)}`;
       const syncIntervalMs = 2500;
@@ -773,6 +814,7 @@
         note: "留言",
         update: "更新",
         "update-voter-usage": "修改使用次数",
+        "image-description": "图片说明",
         "image-add": "新增图片",
         "image-replace": "替换图片",
         "image-rename": "修改图片",
@@ -785,6 +827,7 @@
       let searchText = "";
       let marks = {};
       let notes = {};
+      let descriptions = {};
       let summaries = {};
       let allVotes = {};
       let voters = [];
@@ -792,6 +835,7 @@
       let recentEvents = [];
       let allEvents = [];
       let noteTimers = new Map();
+      let descriptionTimers = new Map();
       let imageCacheBust = "";
       let pendingReplaceFile = "";
       let lastTouchVoteAt = 0;
@@ -891,8 +935,11 @@
             const matchesFilter =
               filter === "all" || (canVote() ? marks[item.file] === filter : Number(summary[filter] || 0) > 0);
             const note = notes[item.file] || "";
+            const description = descriptions[item.file] || "";
             const matchesSearch =
-              item.file.toLowerCase().includes(searchText) || note.toLowerCase().includes(searchText);
+              item.file.toLowerCase().includes(searchText) ||
+              note.toLowerCase().includes(searchText) ||
+              description.toLowerCase().includes(searchText);
             return matchesFilter && matchesSearch;
           });
       }
@@ -962,19 +1009,45 @@
         );
       }
 
+      function setDescription(file, value) {
+        if (!canManageImages()) return;
+        const description = value.slice(0, 100);
+        if (description) {
+          descriptions[file] = description;
+        } else {
+          delete descriptions[file];
+        }
+        window.clearTimeout(descriptionTimers.get(file));
+        descriptionTimers.set(
+          file,
+          window.setTimeout(() => {
+            syncDescription(file);
+            descriptionTimers.delete(file);
+          }, 450),
+        );
+      }
+
       function activeNoteFile() {
         const active = document.activeElement;
         return active?.classList?.contains("note-input") ? active.dataset.file || "" : "";
       }
 
+      function activeDescriptionFile() {
+        const active = document.activeElement;
+        return active?.classList?.contains("description-input") ? active.dataset.file || "" : "";
+      }
+
       function applyRemoteState(payload, shouldRender = true) {
         const focusedFile = activeNoteFile();
         const focusedValue = focusedFile ? document.activeElement.value : "";
+        const focusedDescriptionFile = activeDescriptionFile();
+        const focusedDescriptionValue = focusedDescriptionFile ? document.activeElement.value : "";
         const nextMarks = {};
         const nextNotes = {};
         mergeRemoteImages(payload.images || []);
         summaries = payload.summaries || {};
         allVotes = payload.votes || {};
+        descriptions = payload.descriptions || {};
         voters = Array.isArray(payload.voters) ? payload.voters : [];
         currentVoter = payload.voter || null;
         recentEvents = Array.isArray(payload.recentEvents) ? payload.recentEvents : [];
@@ -984,9 +1057,10 @@
           if (item.note) nextNotes[file] = item.note;
         });
         if (focusedFile) nextNotes[focusedFile] = focusedValue;
+        if (focusedDescriptionFile) descriptions[focusedDescriptionFile] = focusedDescriptionValue;
         marks = nextMarks;
         notes = nextNotes;
-        if (shouldRender && !focusedFile) {
+        if (shouldRender && !focusedFile && !focusedDescriptionFile) {
           render();
         } else {
           updateSummary();
@@ -1144,6 +1218,28 @@
         const payload = await response.json().catch(() => ({}));
         if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
         return payload;
+      }
+
+      async function syncDescription(file) {
+        if (!canManageImages()) return;
+        try {
+          setSyncLabel("保存说明中");
+          const response = await fetch(descriptionUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              project: projectId,
+              file,
+              description: descriptions[file] || "",
+            }),
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+          applyRemoteState(payload, true);
+          setSyncLabel("说明已同步");
+        } catch (error) {
+          setSyncLabel(error.message || "说明保存失败", true);
+        }
       }
 
       function readFileAsDataUrl(file) {
@@ -1381,6 +1477,25 @@
           voteSummary.className = "vote-summary";
           voteSummary.innerHTML = `<span>入选 ${summary.keep || 0}</span><span>待定 ${summary.hold || 0}</span><span>排除 ${summary.out || 0}</span>`;
 
+          let descriptionNode;
+          if (canManageImages()) {
+            descriptionNode = document.createElement("input");
+            descriptionNode.className = "description-input";
+            descriptionNode.type = "text";
+            descriptionNode.maxLength = 100;
+            descriptionNode.placeholder = "主页面填写一句话说明，分发页只读可见";
+            descriptionNode.dataset.file = item.file;
+            descriptionNode.value = descriptions[item.file] || "";
+            descriptionNode.addEventListener("click", (event) => event.stopPropagation());
+            descriptionNode.addEventListener("dblclick", (event) => event.stopPropagation());
+            descriptionNode.addEventListener("input", () => setDescription(item.file, descriptionNode.value));
+            descriptionNode.addEventListener("blur", () => syncDescription(item.file));
+          } else {
+            descriptionNode = document.createElement("div");
+            descriptionNode.className = "image-description description-readonly";
+            descriptionNode.textContent = descriptions[item.file] ? `说明：${descriptions[item.file]}` : "说明：暂无";
+          }
+
           const noteInput = document.createElement("input");
           noteInput.className = "note-input";
           noteInput.type = "text";
@@ -1403,7 +1518,7 @@
           tile.addEventListener("dblclick", () => window.open(encodeURI(`images/${item.file}`), "_blank"));
           caption.append(filename, actions);
           if (canManageImages()) caption.append(imageAdmin);
-          caption.append(voteSummary, noteInput);
+          caption.append(descriptionNode, voteSummary, noteInput);
           tile.append(imageWrap, number, status, caption);
           stage.append(tile);
         });
@@ -1428,7 +1543,7 @@
 
       function exportLogs() {
         const events = allEvents.length ? allEvents.slice().reverse() : recentEvents.slice().reverse();
-        const rows = [["时间", "操作者", "图片序号", "文件名", "新文件名", "操作", "筛选结果", "留言", "原筛选结果", "原留言"]];
+        const rows = [["时间", "操作者", "图片序号", "文件名", "新文件名", "图片说明", "操作", "筛选结果", "留言", "原筛选结果", "原留言"]];
         events.forEach((event) => {
           rows.push([
             event.at || "",
@@ -1436,6 +1551,7 @@
             imageNumber(event.file),
             event.file || "",
             event.nextFile || "",
+            descriptions[event.file] || "",
             actionLabels[event.action] || event.action || "",
             labels[event.mark] || "",
             event.note || "",

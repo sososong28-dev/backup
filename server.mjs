@@ -87,6 +87,10 @@ createServer(async (req, res) => {
       await handlePackagingReviewVote(req, res);
       return;
     }
+    if (req.method === "POST" && url.pathname === "/api/packaging-review/description") {
+      await handlePackagingReviewDescription(req, res);
+      return;
+    }
     if (req.method === "POST" && url.pathname === "/api/packaging-review/image") {
       await handlePackagingReviewImage(req, res);
       return;
@@ -382,6 +386,44 @@ function handlePackagingReviewLogs(url, res) {
   });
 }
 
+async function handlePackagingReviewDescription(req, res) {
+  const body = await readJsonBody(req, 64 * 1024);
+  const project = normalizeReviewProject(body.project);
+  const file = normalizeReviewFile(body.file);
+  if (!file) {
+    sendJson(res, 400, { ok: false, error: "Invalid file." });
+    return;
+  }
+  if (!existsSync(getReviewImagePath(project, file))) {
+    sendJson(res, 404, { ok: false, error: "Image not found." });
+    return;
+  }
+
+  const description = compactText(body.description).slice(0, 100);
+  const state = readPackagingReviewState();
+  const projectState = getReviewProjectState(state, project);
+  const previousDescription = projectState.descriptions[file] || "";
+  if (previousDescription === description) {
+    sendJson(res, 200, buildReviewPayload(project, state));
+    return;
+  }
+
+  if (description) {
+    projectState.descriptions[file] = description;
+  } else {
+    delete projectState.descriptions[file];
+  }
+  projectState.updatedAt = new Date().toISOString();
+  appendReviewEvent(projectState, {
+    action: "image-description",
+    file,
+    note: description,
+    previousNote: previousDescription,
+  });
+  writePackagingReviewState(state);
+  sendJson(res, 200, buildReviewPayload(project, state));
+}
+
 async function handlePackagingReviewImage(req, res) {
   const body = await readJsonBody(req, 32 * 1024 * 1024);
   const action = String(body.action || "").trim();
@@ -506,6 +548,10 @@ function handlePackagingReviewImageRename(project, body, res) {
     projectState.votes[nextFile] = projectState.votes[file];
     delete projectState.votes[file];
   }
+  if (projectState.descriptions[file]) {
+    projectState.descriptions[nextFile] = projectState.descriptions[file];
+    delete projectState.descriptions[file];
+  }
   projectState.updatedAt = new Date().toISOString();
   appendReviewEvent(projectState, {
     action: "image-rename",
@@ -534,6 +580,7 @@ function handlePackagingReviewImageDelete(project, body, res) {
   const removedVotes = Object.keys(projectState.votes[file] || {}).length;
   unlinkSync(imagePath);
   delete projectState.votes[file];
+  delete projectState.descriptions[file];
   projectState.updatedAt = new Date().toISOString();
   appendReviewEvent(projectState, {
     action: "image-delete",
@@ -640,12 +687,14 @@ function getReviewProjectState(state, project) {
       updatedAt: new Date().toISOString(),
       voters: {},
       votes: {},
+      descriptions: {},
       events: [],
     };
   }
   const projectState = state.projects[project];
   if (!projectState.voters || typeof projectState.voters !== "object") projectState.voters = {};
   if (!projectState.votes || typeof projectState.votes !== "object") projectState.votes = {};
+  if (!projectState.descriptions || typeof projectState.descriptions !== "object") projectState.descriptions = {};
   if (!Array.isArray(projectState.events)) projectState.events = [];
   Object.values(projectState.voters).forEach((voter) => {
     voter.usageLimit = normalizeUsageLimit(voter.usageLimit);
@@ -689,6 +738,7 @@ function buildReviewPayload(project, state, options = {}) {
     voters: Object.values(projectState.voters),
     summaries: buildVoteSummaries(projectState.votes),
     votes: projectState.votes,
+    descriptions: projectState.descriptions,
     currentVotes: buildCurrentVotes(projectState.votes, voterId),
     recentEvents: (projectState.events || []).slice(-120).reverse(),
   };
