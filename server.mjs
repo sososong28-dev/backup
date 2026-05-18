@@ -30,6 +30,9 @@ const GAME_PASSWORD_HASH = process.env.GAME_LOGIN_PASSWORD_HASH || (GAME_PASSWOR
 const AUTH_SECRET = process.env.GAME_AUTH_SECRET || randomBytes(32).toString("hex");
 const AUTH_COOKIE = "sharkcoach_session";
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
+const DEFAULT_REVIEW_PROJECT = "001-hyaluronic";
+const DEFAULT_REVIEW_PROJECT_NAME = "001 玻尿酸";
+const DEFAULT_REVIEW_PRODUCT_TAG = "玻尿酸";
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -69,6 +72,18 @@ createServer(async (req, res) => {
         return;
       }
       await handleCoach(req, res);
+      return;
+    }
+    if (req.method === "GET" && url.pathname === "/api/packaging-review/projects") {
+      handlePackagingReviewProjects(res);
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/packaging-review/project") {
+      await handlePackagingReviewProject(req, res);
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/packaging-review/product") {
+      await handlePackagingReviewProduct(req, res);
       return;
     }
     if (req.method === "GET" && url.pathname === "/api/packaging-review/state") {
@@ -225,9 +240,113 @@ async function handleCoach(req, res) {
 
 function handlePackagingReviewState(url, res) {
   const project = normalizeReviewProject(url.searchParams.get("project"));
+  const productTag = normalizeProductTag(url.searchParams.get("product"));
   const voterId = normalizeVoterId(url.searchParams.get("voter"));
   const state = readPackagingReviewState();
-  sendJson(res, 200, buildReviewPayload(project, state, { voterId }));
+  sendJson(res, 200, buildReviewPayload(project, state, { voterId, productTag }));
+}
+
+function handlePackagingReviewProjects(res) {
+  const state = readPackagingReviewState();
+  ensureReviewProjectsFromDisk(state);
+  writePackagingReviewState(state);
+  sendJson(res, 200, {
+    ok: true,
+    projects: listReviewProjectInfos(state),
+  });
+}
+
+async function handlePackagingReviewProject(req, res) {
+  const body = await readJsonBody(req, 64 * 1024);
+  const action = String(body.action || "create").trim();
+  if (action !== "create" && action !== "update") {
+    sendJson(res, 400, { ok: false, error: "Invalid project action." });
+    return;
+  }
+
+  const project = normalizeReviewProject(body.project || body.id || slugifyReviewProject(body.name));
+  const name = compactText(body.name).slice(0, 60) || project;
+  const state = readPackagingReviewState();
+  const projectState = getReviewProjectState(state, project);
+  const now = new Date().toISOString();
+  projectState.info = {
+    ...(projectState.info || {}),
+    id: project,
+    name,
+    updatedAt: now,
+  };
+  projectState.updatedAt = now;
+  ensureReviewImagesDir(project);
+  appendReviewEvent(projectState, {
+    action: action === "create" ? "project-create" : "project-update",
+    note: name,
+  });
+  writePackagingReviewState(state);
+  sendJson(res, 200, {
+    ...buildReviewPayload(project, state, { productTag: "" }),
+    projects: listReviewProjectInfos(state),
+  });
+}
+
+async function handlePackagingReviewProduct(req, res) {
+  const body = await readJsonBody(req, 64 * 1024);
+  const action = String(body.action || "").trim();
+  const project = normalizeReviewProject(body.project);
+  const productTag = normalizeProductTag(body.productTag || body.product);
+  const viewProductTag = normalizeProductTag(body.viewProductTag);
+  const state = readPackagingReviewState();
+  const projectState = getReviewProjectState(state, project);
+
+  if (action === "add") {
+    if (!productTag) {
+      sendJson(res, 400, { ok: false, error: "Invalid product tag." });
+      return;
+    }
+    addReviewProductTag(projectState, productTag);
+    projectState.updatedAt = new Date().toISOString();
+    appendReviewEvent(projectState, {
+      action: "product-add",
+      productTag,
+      note: productTag,
+    });
+    writePackagingReviewState(state);
+    sendJson(res, 200, buildReviewPayload(project, state, { productTag }));
+    return;
+  }
+
+  if (action === "assign-image") {
+    const file = normalizeReviewFile(body.file);
+    if (!file) {
+      sendJson(res, 400, { ok: false, error: "Invalid file." });
+      return;
+    }
+    if (!existsSync(getReviewImagePath(project, file))) {
+      sendJson(res, 404, { ok: false, error: "Image not found." });
+      return;
+    }
+    if (productTag) addReviewProductTag(projectState, productTag);
+    const previousProductTag = projectState.imageProducts[file] || "";
+    if (previousProductTag === productTag) {
+      sendJson(res, 200, buildReviewPayload(project, state, { productTag: viewProductTag }));
+      return;
+    }
+    if (productTag) projectState.imageProducts[file] = productTag;
+    else delete projectState.imageProducts[file];
+    projectState.updatedAt = new Date().toISOString();
+    appendReviewEvent(projectState, {
+      action: "image-product",
+      file,
+      productTag,
+      previousProductTag,
+      note: productTag || "未分组",
+      previousNote: previousProductTag || "未分组",
+    });
+    writePackagingReviewState(state);
+    sendJson(res, 200, buildReviewPayload(project, state, { productTag: viewProductTag }));
+    return;
+  }
+
+  sendJson(res, 400, { ok: false, error: "Invalid product action." });
 }
 
 async function handlePackagingReviewVoter(req, res) {
@@ -238,11 +357,14 @@ async function handlePackagingReviewVoter(req, res) {
   const index = Object.keys(projectState.voters).length + 1;
   const voterId = createReviewId();
   const name = compactText(body.name).slice(0, 40) || `外发端${index}`;
+  const productTag = normalizeProductTag(body.productTag || body.product);
+  if (productTag) addReviewProductTag(projectState, productTag);
   const now = new Date().toISOString();
 
   projectState.voters[voterId] = {
     id: voterId,
     name,
+    productTag,
     usageLimit: normalizeUsageLimit(body.usageLimit),
     voteClickCount: 0,
     submitCount: 0,
@@ -255,18 +377,20 @@ async function handlePackagingReviewVoter(req, res) {
     action: "create-voter",
     voterId,
     voterName: name,
+    productTag,
   });
   writePackagingReviewState(state);
 
   sendJson(res, 200, {
     ...buildReviewPayload(project, state, { voterId, req }),
-    link: buildVoterLink(req, project, voterId),
+    link: buildVoterLink(req, project, voterId, productTag),
   });
 }
 
 async function handlePackagingReviewVoterSettings(req, res) {
   const body = await readJsonBody(req, 64 * 1024);
   const project = normalizeReviewProject(body.project);
+  const productTag = normalizeProductTag(body.productTag || body.product);
   const voterId = normalizeVoterId(body.voter);
   if (!voterId) {
     sendJson(res, 400, { ok: false, error: "Invalid voter." });
@@ -284,7 +408,7 @@ async function handlePackagingReviewVoterSettings(req, res) {
   const usageLimit = normalizeUsageLimit(body.usageLimit);
   const previousUsageLimit = normalizeUsageLimit(voter.usageLimit);
   if (previousUsageLimit === usageLimit) {
-    sendJson(res, 200, buildReviewPayload(project, state));
+    sendJson(res, 200, buildReviewPayload(project, state, { productTag }));
     return;
   }
 
@@ -302,7 +426,7 @@ async function handlePackagingReviewVoterSettings(req, res) {
     previousNote: formatUsageLimitText(previousUsageLimit),
   });
   writePackagingReviewState(state);
-  sendJson(res, 200, buildReviewPayload(project, state));
+  sendJson(res, 200, buildReviewPayload(project, state, { productTag }));
 }
 
 async function handlePackagingReviewVote(req, res) {
@@ -427,6 +551,7 @@ function handlePackagingReviewLogs(url, res) {
 async function handlePackagingReviewDescription(req, res) {
   const body = await readJsonBody(req, 64 * 1024);
   const project = normalizeReviewProject(body.project);
+  const productTag = normalizeProductTag(body.productTag || body.product);
   const file = normalizeReviewFile(body.file);
   if (!file) {
     sendJson(res, 400, { ok: false, error: "Invalid file." });
@@ -442,7 +567,7 @@ async function handlePackagingReviewDescription(req, res) {
   const projectState = getReviewProjectState(state, project);
   const previousDescription = projectState.descriptions[file] || "";
   if (previousDescription === description) {
-    sendJson(res, 200, buildReviewPayload(project, state));
+    sendJson(res, 200, buildReviewPayload(project, state, { productTag }));
     return;
   }
 
@@ -459,7 +584,7 @@ async function handlePackagingReviewDescription(req, res) {
     previousNote: previousDescription,
   });
   writePackagingReviewState(state);
-  sendJson(res, 200, buildReviewPayload(project, state));
+  sendJson(res, 200, buildReviewPayload(project, state, { productTag }));
 }
 
 async function handlePackagingReviewImage(req, res) {
@@ -501,17 +626,24 @@ function handlePackagingReviewImageAdd(project, body, res) {
 
   const state = readPackagingReviewState();
   const projectState = getReviewProjectState(state, project);
+  const productTag = normalizeProductTag(body.productTag || body.product);
+  if (productTag) {
+    addReviewProductTag(projectState, productTag);
+    projectState.imageProducts[file] = productTag;
+  }
   projectState.updatedAt = new Date().toISOString();
   appendReviewEvent(projectState, {
     action: "image-add",
     file,
+    productTag,
     note: "新增图片",
   });
   writePackagingReviewState(state);
-  sendJson(res, 200, buildReviewPayload(project, state));
+  sendJson(res, 200, buildReviewPayload(project, state, { productTag }));
 }
 
 function handlePackagingReviewImageReplace(project, body, res) {
+  const productTag = normalizeProductTag(body.productTag || body.product);
   const file = normalizeReviewFile(body.file);
   if (!file) {
     sendJson(res, 400, { ok: false, error: "Invalid file." });
@@ -546,10 +678,11 @@ function handlePackagingReviewImageReplace(project, body, res) {
     note: "替换图片",
   });
   writePackagingReviewState(state);
-  sendJson(res, 200, buildReviewPayload(project, state));
+  sendJson(res, 200, buildReviewPayload(project, state, { productTag }));
 }
 
 function handlePackagingReviewImageRename(project, body, res) {
+  const productTag = normalizeProductTag(body.productTag || body.product);
   const file = normalizeReviewFile(body.file);
   if (!file) {
     sendJson(res, 400, { ok: false, error: "Invalid file." });
@@ -568,7 +701,7 @@ function handlePackagingReviewImageRename(project, body, res) {
   }
   if (file === nextFile) {
     const state = readPackagingReviewState();
-    sendJson(res, 200, buildReviewPayload(project, state));
+    sendJson(res, 200, buildReviewPayload(project, state, { productTag }));
     return;
   }
 
@@ -590,6 +723,10 @@ function handlePackagingReviewImageRename(project, body, res) {
     projectState.descriptions[nextFile] = projectState.descriptions[file];
     delete projectState.descriptions[file];
   }
+  if (projectState.imageProducts[file]) {
+    projectState.imageProducts[nextFile] = projectState.imageProducts[file];
+    delete projectState.imageProducts[file];
+  }
   projectState.updatedAt = new Date().toISOString();
   appendReviewEvent(projectState, {
     action: "image-rename",
@@ -598,10 +735,11 @@ function handlePackagingReviewImageRename(project, body, res) {
     note: "修改图片名称",
   });
   writePackagingReviewState(state);
-  sendJson(res, 200, buildReviewPayload(project, state));
+  sendJson(res, 200, buildReviewPayload(project, state, { productTag }));
 }
 
 function handlePackagingReviewImageDelete(project, body, res) {
+  const productTag = normalizeProductTag(body.productTag || body.product);
   const file = normalizeReviewFile(body.file);
   if (!file) {
     sendJson(res, 400, { ok: false, error: "Invalid file." });
@@ -619,6 +757,7 @@ function handlePackagingReviewImageDelete(project, body, res) {
   unlinkSync(imagePath);
   delete projectState.votes[file];
   delete projectState.descriptions[file];
+  delete projectState.imageProducts[file];
   projectState.updatedAt = new Date().toISOString();
   appendReviewEvent(projectState, {
     action: "image-delete",
@@ -626,12 +765,28 @@ function handlePackagingReviewImageDelete(project, body, res) {
     note: removedVotes ? `删除图片，清理 ${removedVotes} 条投票` : "删除图片",
   });
   writePackagingReviewState(state);
-  sendJson(res, 200, buildReviewPayload(project, state));
+  sendJson(res, 200, buildReviewPayload(project, state, { productTag }));
 }
 
 function normalizeReviewProject(value) {
-  const project = String(value || "001-hyaluronic").trim();
-  return /^[a-z0-9][a-z0-9-]{0,80}$/i.test(project) ? project : "001-hyaluronic";
+  const project = String(value || DEFAULT_REVIEW_PROJECT).trim();
+  return /^[a-z0-9][a-z0-9-]{0,80}$/i.test(project) ? project : DEFAULT_REVIEW_PROJECT;
+}
+
+function normalizeProductTag(value) {
+  const tag = compactText(value).slice(0, 40);
+  if (!tag || tag === "全部产品") return "";
+  return tag;
+}
+
+function slugifyReviewProject(value) {
+  const ascii = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+  return ascii || `project-${Date.now()}`;
 }
 
 function normalizeVoterId(value) {
@@ -723,6 +878,9 @@ function getReviewProjectState(state, project) {
   if (!state.projects[project]) {
     state.projects[project] = {
       updatedAt: new Date().toISOString(),
+      info: { id: project, name: defaultReviewProjectName(project) },
+      productTags: defaultReviewProductTags(project),
+      imageProducts: {},
       voters: {},
       votes: {},
       descriptions: {},
@@ -730,6 +888,14 @@ function getReviewProjectState(state, project) {
     };
   }
   const projectState = state.projects[project];
+  if (!projectState.info || typeof projectState.info !== "object") {
+    projectState.info = { id: project, name: defaultReviewProjectName(project) };
+  }
+  projectState.info.id = project;
+  projectState.info.name = compactText(projectState.info.name).slice(0, 60) || defaultReviewProjectName(project);
+  if (!Array.isArray(projectState.productTags)) projectState.productTags = defaultReviewProductTags(project);
+  projectState.productTags = [...new Set(projectState.productTags.map(normalizeProductTag).filter(Boolean))].slice(0, 80);
+  if (!projectState.imageProducts || typeof projectState.imageProducts !== "object") projectState.imageProducts = {};
   if (!projectState.voters || typeof projectState.voters !== "object") projectState.voters = {};
   if (!projectState.votes || typeof projectState.votes !== "object") projectState.votes = {};
   if (!projectState.descriptions || typeof projectState.descriptions !== "object") projectState.descriptions = {};
@@ -739,7 +905,10 @@ function getReviewProjectState(state, project) {
     voter.voteClickCount = Math.max(0, Math.floor(Number(voter.voteClickCount || 0)));
     voter.submitCount = Math.max(0, Math.floor(Number(voter.submitCount || 0)));
     voter.submittedAt = typeof voter.submittedAt === "string" ? voter.submittedAt : "";
+    voter.productTag = normalizeProductTag(voter.productTag);
   });
+
+  migrateDefaultReviewProductTags(project, projectState);
 
   if (projectState.items && typeof projectState.items === "object" && Object.keys(projectState.items).length) {
     const voterId = "legacy0001";
@@ -747,6 +916,7 @@ function getReviewProjectState(state, project) {
       projectState.voters[voterId] = {
         id: voterId,
         name: "历史同步结果",
+        productTag: "",
         usageLimit: null,
         voteClickCount: 0,
         submitCount: 0,
@@ -768,20 +938,99 @@ function getReviewProjectState(state, project) {
   return projectState;
 }
 
+function defaultReviewProjectName(project) {
+  return project === DEFAULT_REVIEW_PROJECT ? DEFAULT_REVIEW_PROJECT_NAME : project;
+}
+
+function defaultReviewProductTags(project) {
+  return project === DEFAULT_REVIEW_PROJECT ? [DEFAULT_REVIEW_PRODUCT_TAG] : [];
+}
+
+function migrateDefaultReviewProductTags(project, projectState) {
+  if (project !== DEFAULT_REVIEW_PROJECT) return;
+  addReviewProductTag(projectState, DEFAULT_REVIEW_PRODUCT_TAG);
+  const images = listReviewImages(project);
+  if (!images.length) return;
+  const hasAssignedProduct = Object.keys(projectState.imageProducts || {}).length > 0;
+  if (hasAssignedProduct) return;
+  images.forEach((file) => {
+    projectState.imageProducts[file] = DEFAULT_REVIEW_PRODUCT_TAG;
+  });
+}
+
+function addReviewProductTag(projectState, productTag) {
+  const tag = normalizeProductTag(productTag);
+  if (!tag) return;
+  if (!Array.isArray(projectState.productTags)) projectState.productTags = [];
+  if (!projectState.productTags.includes(tag)) projectState.productTags.push(tag);
+}
+
+function ensureReviewProjectsFromDisk(state) {
+  if (!state.projects || typeof state.projects !== "object") state.projects = {};
+  const reviewRoot = resolve(ROOT, "packaging-review");
+  if (existsSync(reviewRoot)) {
+    readdirSync(reviewRoot, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => normalizeReviewProject(entry.name))
+      .forEach((project) => getReviewProjectState(state, project));
+  }
+  getReviewProjectState(state, DEFAULT_REVIEW_PROJECT);
+}
+
+function listReviewProjectInfos(state) {
+  ensureReviewProjectsFromDisk(state);
+  return Object.keys(state.projects)
+    .sort((left, right) => left.localeCompare(right, "zh-CN"))
+    .map((project) => {
+      const projectState = getReviewProjectState(state, project);
+      return {
+        id: project,
+        name: projectState.info.name,
+        productTags: projectState.productTags || [],
+        imageCount: listReviewImages(project).length,
+        updatedAt: projectState.updatedAt || "",
+      };
+    });
+}
+
+function filterReviewImagesByProduct(images, imageProducts, productTag) {
+  const tag = normalizeProductTag(productTag);
+  if (!tag) return images;
+  return images.filter((file) => imageProducts?.[file] === tag);
+}
+
+function filterReviewObjectByImages(source, images) {
+  const allowed = new Set(images);
+  return Object.entries(source || {}).reduce((next, [file, value]) => {
+    if (allowed.has(file)) next[file] = value;
+    return next;
+  }, {});
+}
+
 function buildReviewPayload(project, state, options = {}) {
   const projectState = getReviewProjectState(state, project);
   const voterId = normalizeVoterId(options.voterId);
+  const voter = voterId && projectState.voters[voterId] ? projectState.voters[voterId] : null;
+  const productTag = voter?.productTag || normalizeProductTag(options.productTag);
+  const images = filterReviewImagesByProduct(listReviewImages(project), projectState.imageProducts, productTag);
+  const visibleVotes = filterReviewObjectByImages(projectState.votes, images);
+  const visibleDescriptions = filterReviewObjectByImages(projectState.descriptions, images);
   return {
     ok: true,
     project,
-    images: listReviewImages(project),
+    projectInfo: projectState.info,
+    productTag,
+    productTags: projectState.productTags || [],
+    imageProducts: projectState.imageProducts || {},
+    projects: listReviewProjectInfos(state),
+    images,
     updatedAt: projectState.updatedAt,
-    voter: voterId && projectState.voters[voterId] ? projectState.voters[voterId] : null,
+    voter,
     voters: Object.values(projectState.voters),
-    summaries: buildVoteSummaries(projectState.votes),
-    votes: projectState.votes,
-    descriptions: projectState.descriptions,
-    currentVotes: buildCurrentVotes(projectState.votes, voterId),
+    summaries: buildVoteSummaries(visibleVotes),
+    votes: visibleVotes,
+    descriptions: visibleDescriptions,
+    currentVotes: buildCurrentVotes(visibleVotes, voterId),
     recentEvents: (projectState.events || []).slice(-120).reverse(),
   };
 }
@@ -920,10 +1169,13 @@ function getReviewEventAction(previousMark, previousNote, mark, note, recordClic
   return "update";
 }
 
-function buildVoterLink(req, project, voterId) {
+function buildVoterLink(req, project, voterId, productTag = "") {
   const proto = req.headers["x-forwarded-proto"] || (isHttps(req) ? "https" : "http");
   const host = req.headers.host || "localhost";
-  return `${proto}://${host}/packaging-review/${encodeURIComponent(project)}/?voter=${encodeURIComponent(voterId)}`;
+  const params = new URLSearchParams({ voter: voterId });
+  const tag = normalizeProductTag(productTag);
+  if (tag) params.set("product", tag);
+  return `${proto}://${host}/packaging-review/${encodeURIComponent(project)}/?${params.toString()}`;
 }
 
 function buildCoachMessages(handState) {
@@ -1017,6 +1269,15 @@ function parseModelJson(content) {
 }
 
 async function serveStatic(pathname, req, res) {
+  const reviewPageMatch = pathname.match(/^\/packaging-review\/([a-z0-9][a-z0-9-]{0,80})\/?$/i);
+  if (reviewPageMatch) {
+    const directIndexPath = resolve(ROOT, "packaging-review", reviewPageMatch[1], "index.html");
+    if (!existsSync(directIndexPath)) {
+      await streamStaticFile(resolve(ROOT, "packaging-review", DEFAULT_REVIEW_PROJECT, "index.html"), req, res);
+      return;
+    }
+  }
+
   const requestPath = pathname === "/" ? "/index.html" : pathname;
   const safePath = normalize(decodeURIComponent(requestPath)).replace(/^(\.\.[/\\])+/, "");
   let filePath = resolve(join(ROOT, safePath));
@@ -1034,6 +1295,10 @@ async function serveStatic(pathname, req, res) {
     }
   }
 
+  await streamStaticFile(filePath, req, res);
+}
+
+async function streamStaticFile(filePath, req, res) {
   const type = MIME_TYPES[extname(filePath).toLowerCase()] || "application/octet-stream";
   res.writeHead(200, { "Content-Type": type, "Cache-Control": "no-store" });
   if (req.method === "HEAD") {

@@ -124,6 +124,49 @@
         gap: 8px;
       }
 
+      .decision-panel {
+        grid-column: 1 / -1;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(260px, 1fr));
+        gap: 10px;
+        padding-top: 10px;
+        border-top: 1px solid rgba(0, 0, 0, 0.08);
+      }
+
+      .decision-group {
+        display: grid;
+        grid-template-columns: auto minmax(120px, 0.8fr) minmax(150px, 1fr) auto;
+        gap: 6px;
+        align-items: center;
+      }
+
+      .decision-group label {
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .decision-group input,
+      .decision-group select,
+      .product-select {
+        width: 100%;
+        height: 34px;
+        min-width: 0;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 0 8px;
+        outline: 0;
+        color: var(--ink);
+        background: #ffffff;
+      }
+
+      .decision-group input:focus,
+      .decision-group select:focus,
+      .product-select:focus {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.16);
+      }
+
       .segmented,
       .pager,
       .searchbox {
@@ -382,6 +425,32 @@
         color: #3e3b35;
         font-size: 12px;
         line-height: 1.35;
+      }
+
+      .product-row {
+        grid-column: 1 / -1;
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: 6px;
+        align-items: center;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .product-row span {
+        font-weight: 700;
+      }
+
+      .product-readonly {
+        min-width: 0;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 5px 7px;
+        background: rgba(255, 255, 255, 0.74);
+        color: #3e3b35;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
       .description-input {
@@ -713,6 +782,14 @@
           grid-template-columns: 1fr;
         }
 
+        .decision-panel {
+          grid-template-columns: 1fr;
+        }
+
+        .decision-group {
+          grid-template-columns: 1fr;
+        }
+
         .segmented,
         .pager {
           justify-content: space-between;
@@ -837,6 +914,20 @@
           <button class="button text" type="button" id="exportBtn">导出全部</button>
           <button class="button text" type="button" id="fullBtn">全屏</button>
         </div>
+        <div class="decision-panel host-only" id="decisionPanel" aria-label="项目与产品切换">
+          <div class="decision-group">
+            <label for="projectSelect">项目</label>
+            <input id="projectSearchInput" type="search" placeholder="搜索项目" autocomplete="off" />
+            <select id="projectSelect"></select>
+            <button class="button text" type="button" id="newProjectBtn">新增项目</button>
+          </div>
+          <div class="decision-group">
+            <label for="productSelect">产品</label>
+            <input id="productSearchInput" type="search" placeholder="搜索产品标签" autocomplete="off" />
+            <select id="productSelect"></select>
+            <button class="button text" type="button" id="newProductBtn">新增产品</button>
+          </div>
+        </div>
       </header>
       <section class="stage" id="stage" aria-label="包装图片展示"></section>
       <section class="empty" id="empty">没有匹配的图片</section>
@@ -910,15 +1001,23 @@
       ];
 
       const pageSize = 10;
-      const projectId = "001-hyaluronic";
+      const defaultProjectId = "001-hyaluronic";
+      const urlParams = new URLSearchParams(window.location.search);
+      let projectId = projectFromPath();
+      let currentProductTag = normalizeProductTag(urlParams.get("product") || "");
+      let projectInfo = { id: projectId, name: projectId };
+      let projects = [];
+      let productTags = [];
+      let imageProducts = {};
       const voterUrl = "/api/packaging-review/voter";
       const voterSettingsUrl = "/api/packaging-review/voter-settings";
+      const projectUrl = "/api/packaging-review/project";
+      const productUrl = "/api/packaging-review/product";
       let images = initialImages.slice();
       const voteUrl = "/api/packaging-review/vote";
       const submitUrl = "/api/packaging-review/submit";
       const descriptionUrl = "/api/packaging-review/description";
       const imageUrl = "/api/packaging-review/image";
-      const logsUrl = `/api/packaging-review/logs?project=${encodeURIComponent(projectId)}`;
       const syncIntervalMs = 2500;
       const labels = { keep: "入选", hold: "待定", out: "排除" };
       const actionLabels = {
@@ -931,13 +1030,16 @@
         update: "更新",
         "update-voter-usage": "修改使用次数",
         "submit-confirm": "提交确认",
+        "project-create": "新增项目",
+        "project-update": "修改项目",
+        "product-add": "新增产品",
+        "image-product": "产品标签",
         "image-description": "图片说明",
         "image-add": "新增图片",
         "image-replace": "替换图片",
         "image-rename": "修改图片",
         "image-delete": "删除图片",
       };
-      const urlParams = new URLSearchParams(window.location.search);
       let voterId = urlParams.get("voter") || "";
       let page = 0;
       let filter = "all";
@@ -967,6 +1069,13 @@
       const syncLabel = document.querySelector("#syncLabel");
       const pageLabel = document.querySelector("#pageLabel");
       const searchInput = document.querySelector("#searchInput");
+      const decisionPanel = document.querySelector("#decisionPanel");
+      const projectSearchInput = document.querySelector("#projectSearchInput");
+      const projectSelect = document.querySelector("#projectSelect");
+      const newProjectBtn = document.querySelector("#newProjectBtn");
+      const productSearchInput = document.querySelector("#productSearchInput");
+      const productSelect = document.querySelector("#productSelect");
+      const newProductBtn = document.querySelector("#newProductBtn");
       const prevBtn = document.querySelector("#prevBtn");
       const nextBtn = document.querySelector("#nextBtn");
       const createVoterBtn = document.querySelector("#createVoterBtn");
@@ -990,8 +1099,23 @@
       const cancelSubmitBtn = document.querySelector("#cancelSubmitBtn");
       const confirmSubmitBtn = document.querySelector("#confirmSubmitBtn");
 
+      function projectFromPath() {
+        const match = window.location.pathname.match(/\/packaging-review\/([^/]+)\//);
+        return /^[a-z0-9][a-z0-9-]{0,80}$/i.test(match?.[1] || "") ? match[1] : defaultProjectId;
+      }
+
+      function normalizeProductTag(value) {
+        const tag = String(value || "").trim().replace(/\s+/g, " ").slice(0, 40);
+        return tag === "全部产品" ? "" : tag;
+      }
+
+      function logsUrl() {
+        return `/api/packaging-review/logs?project=${encodeURIComponent(projectId)}`;
+      }
+
       function stateUrl() {
         const params = new URLSearchParams({ project: projectId });
+        if (currentProductTag) params.set("product", currentProductTag);
         if (voterId) params.set("voter", voterId);
         return `/api/packaging-review/state?${params.toString()}`;
       }
@@ -1050,9 +1174,14 @@
         return Math.max(0, Math.min(99999, Math.floor(parsed)));
       }
 
+      function productNameForFile(file) {
+        return imageProducts[file] || "未分组";
+      }
+
       function syncHostControls() {
         addImageBtn.classList.toggle("is-hidden", !canManageImages());
         voterSettingsBtn.classList.toggle("is-hidden", !canManageImages());
+        decisionPanel.classList.toggle("is-hidden", !canManageImages());
         submitConfirmBtn.classList.toggle("is-hidden", !canSubmitConfirm());
       }
 
@@ -1074,10 +1203,12 @@
               filter === "all" || (hasValidVoter() ? marks[item.file] === filter : Number(summary[filter] || 0) > 0);
             const note = notes[item.file] || "";
             const description = descriptions[item.file] || "";
+            const productName = productNameForFile(item.file).toLowerCase();
             const matchesSearch =
               item.file.toLowerCase().includes(searchText) ||
               note.toLowerCase().includes(searchText) ||
-              description.toLowerCase().includes(searchText);
+              description.toLowerCase().includes(searchText) ||
+              productName.includes(searchText);
             return matchesFilter && matchesSearch;
           });
       }
@@ -1092,7 +1223,7 @@
           },
           { keep: 0, hold: 0, out: 0 },
         );
-        countLabel.textContent = `共 ${images.length} 张`;
+        countLabel.textContent = `${projectInfo.name || projectId} / ${currentProductTag || "全部产品"} / 共 ${images.length} 张`;
         resultLabel.textContent = `入选 ${totals.keep} / 待定 ${totals.hold} / 排除 ${totals.out}`;
         voterLabel.textContent = currentVoter ? `当前：${currentVoter.name}` : voterId ? "分发链接无效" : "主页面";
         usageLabel.textContent = currentVoter ? usageText(currentVoter) : "使用次数：主页面设置";
@@ -1187,6 +1318,12 @@
         const focusedDescriptionValue = focusedDescriptionFile ? document.activeElement.value : "";
         const nextMarks = {};
         const nextNotes = {};
+        projectId = payload.project || projectId;
+        projectInfo = payload.projectInfo || projectInfo;
+        currentProductTag = normalizeProductTag(payload.productTag || currentProductTag);
+        projects = Array.isArray(payload.projects) ? payload.projects : projects;
+        productTags = Array.isArray(payload.productTags) ? payload.productTags : [];
+        imageProducts = payload.imageProducts || {};
         mergeRemoteImages(payload.images || []);
         summaries = payload.summaries || {};
         allVotes = payload.votes || {};
@@ -1209,8 +1346,47 @@
           updateSummary();
         }
         syncHostControls();
+        renderDecisionControls();
         renderVoterPanel();
         renderLogs();
+      }
+
+      function renderDecisionControls() {
+        if (!canManageImages()) return;
+        const projectQuery = projectSearchInput.value.trim().toLowerCase();
+        const visibleProjects = projects.filter((project) =>
+          `${project.name || ""} ${project.id || ""}`.toLowerCase().includes(projectQuery),
+        );
+        const projectOptions = visibleProjects.some((project) => project.id === projectId)
+          ? visibleProjects
+          : [{ id: projectId, name: projectInfo.name || projectId, imageCount: images.length }, ...visibleProjects];
+        projectSelect.innerHTML = "";
+        projectOptions.forEach((project) => {
+          const option = document.createElement("option");
+          option.value = project.id;
+          option.textContent = `${project.name || project.id}（${project.imageCount || 0} 张）`;
+          option.selected = project.id === projectId;
+          projectSelect.append(option);
+        });
+
+        const productQuery = productSearchInput.value.trim().toLowerCase();
+        const visibleTags = productTags.filter((tag) => tag.toLowerCase().includes(productQuery));
+        const tags = currentProductTag && !visibleTags.includes(currentProductTag)
+          ? [currentProductTag, ...visibleTags]
+          : visibleTags;
+        productSelect.innerHTML = "";
+        const allOption = document.createElement("option");
+        allOption.value = "";
+        allOption.textContent = "全部产品";
+        allOption.selected = !currentProductTag;
+        productSelect.append(allOption);
+        tags.forEach((tag) => {
+          const option = document.createElement("option");
+          option.value = tag;
+          option.textContent = tag;
+          option.selected = tag === currentProductTag;
+          productSelect.append(option);
+        });
       }
 
       async function loadRemoteState({ silent = false } = {}) {
@@ -1238,7 +1414,12 @@
           const response = await fetch(voterUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ project: projectId, name, usageLimit: parseUsageLimit(usageLimitText) }),
+            body: JSON.stringify({
+              project: projectId,
+              name,
+              productTag: currentProductTag,
+              usageLimit: parseUsageLimit(usageLimitText),
+            }),
           });
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           const payload = await response.json();
@@ -1249,6 +1430,82 @@
         } catch {
           setSyncLabel("生成失败", true);
         }
+      }
+
+      async function createProject() {
+        if (!canManageImages()) return;
+        const name = window.prompt("项目名称", `新项目${projects.length + 1}`);
+        if (name === null) return;
+        const defaultId = slugProjectId(name);
+        const id = window.prompt("项目标识（英文/数字/短横线）", defaultId);
+        if (id === null) return;
+        const project = normalizeProjectId(id);
+        try {
+          setSyncLabel("新增项目中");
+          const response = await fetch(projectUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "create", project, name }),
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+          switchProject(payload.project || project);
+        } catch (error) {
+          setSyncLabel(error.message || "新增项目失败", true);
+        }
+      }
+
+      async function createProductTag() {
+        if (!canManageImages()) return;
+        const productTag = normalizeProductTag(window.prompt("产品标签名称", currentProductTag || ""));
+        if (!productTag) return;
+        try {
+          setSyncLabel("新增产品中");
+          const response = await fetch(productUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "add", project: projectId, productTag }),
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+          currentProductTag = productTag;
+          updateProductUrl();
+          applyRemoteState(payload, true);
+          setSyncLabel("产品已新增");
+        } catch (error) {
+          setSyncLabel(error.message || "新增产品失败", true);
+        }
+      }
+
+      function slugProjectId(value) {
+        return String(value || "")
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "")
+          .slice(0, 60) || `project-${Date.now()}`;
+      }
+
+      function normalizeProjectId(value) {
+        const id = String(value || "").trim();
+        return /^[a-z0-9][a-z0-9-]{0,80}$/i.test(id) ? id : slugProjectId(id);
+      }
+
+      function switchProject(nextProjectId) {
+        const nextId = normalizeProjectId(nextProjectId);
+        if (!nextId || nextId === projectId) return;
+        const url = new URL(window.location.href);
+        url.pathname = `/packaging-review/${encodeURIComponent(nextId)}/`;
+        url.search = "";
+        window.location.href = url.toString();
+      }
+
+      function updateProductUrl() {
+        if (!canManageImages()) return;
+        const url = new URL(window.location.href);
+        if (currentProductTag) url.searchParams.set("product", currentProductTag);
+        else url.searchParams.delete("product");
+        window.history.replaceState({}, "", url.toString());
       }
 
       async function copyCurrentLink() {
@@ -1395,7 +1652,7 @@
         const response = await fetch(imageUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ project: projectId, ...body }),
+          body: JSON.stringify({ project: projectId, productTag: currentProductTag, ...body }),
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
@@ -1411,6 +1668,7 @@
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               project: projectId,
+              productTag: currentProductTag,
               file,
               description: descriptions[file] || "",
             }),
@@ -1421,6 +1679,32 @@
           setSyncLabel("说明已同步");
         } catch (error) {
           setSyncLabel(error.message || "说明保存失败", true);
+        }
+      }
+
+      async function setImageProduct(file, productTag) {
+        if (!canManageImages()) return;
+        const nextProductTag = normalizeProductTag(productTag);
+        try {
+          imageProducts[file] = nextProductTag;
+          setSyncLabel("保存产品标签中");
+          const response = await fetch(productUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "assign-image",
+              project: projectId,
+              productTag: nextProductTag,
+              viewProductTag: currentProductTag,
+              file,
+            }),
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+          applyRemoteState(payload, true);
+          setSyncLabel("产品标签已同步");
+        } catch (error) {
+          setSyncLabel(error.message || "产品标签保存失败", true);
         }
       }
 
@@ -1464,7 +1748,7 @@
       }
 
       async function loadLogs() {
-        const response = await fetch(logsUrl, { cache: "no-store" });
+        const response = await fetch(logsUrl(), { cache: "no-store" });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const payload = await response.json();
         if (!payload.ok) throw new Error(payload.error || "Logs failed");
@@ -1504,7 +1788,7 @@
           const name = document.createElement("strong");
           name.textContent = voter.name || voter.id;
           const usage = document.createElement("span");
-          usage.textContent = usageText(voter).replace("使用次数：", "已用 ");
+          usage.textContent = `${usageText(voter).replace("使用次数：", "已用 ")} / 产品：${voter.productTag || "全部产品"}`;
           main.append(name, usage);
 
           const input = document.createElement("input");
@@ -1541,6 +1825,8 @@
         const url = new URL(window.location.href);
         url.search = "";
         url.searchParams.set("voter", rowVoterId);
+        const tag = voters.find((voter) => voter.id === rowVoterId)?.productTag || "";
+        if (tag) url.searchParams.set("product", tag);
         return url.toString();
       }
 
@@ -1552,6 +1838,7 @@
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               project: projectId,
+              productTag: currentProductTag,
               voter: rowVoterId,
               usageLimit: parseUsageLimit(value),
             }),
@@ -1656,6 +1943,38 @@
             });
           }
 
+          const productNode = document.createElement("div");
+          productNode.className = "product-row";
+          const productLabel = document.createElement("span");
+          productLabel.textContent = "产品";
+          if (canManageImages()) {
+            const select = document.createElement("select");
+            select.className = "product-select";
+            select.dataset.file = item.file;
+            const currentTag = imageProducts[item.file] || "";
+            const tagOptions = currentTag && !productTags.includes(currentTag) ? [currentTag, ...productTags] : productTags;
+            const blankOption = document.createElement("option");
+            blankOption.value = "";
+            blankOption.textContent = "未分组";
+            blankOption.selected = !currentTag;
+            select.append(blankOption);
+            tagOptions.forEach((tag) => {
+              const option = document.createElement("option");
+              option.value = tag;
+              option.textContent = tag;
+              option.selected = tag === currentTag;
+              select.append(option);
+            });
+            select.addEventListener("click", (event) => event.stopPropagation());
+            select.addEventListener("change", () => setImageProduct(item.file, select.value));
+            productNode.append(productLabel, select);
+          } else {
+            const readonly = document.createElement("div");
+            readonly.className = "product-readonly";
+            readonly.textContent = productNameForFile(item.file);
+            productNode.append(productLabel, readonly);
+          }
+
           const voteSummary = document.createElement("div");
           voteSummary.className = "vote-summary";
           voteSummary.innerHTML = `<span>入选 ${summary.keep || 0}</span><span>待定 ${summary.hold || 0}</span><span>排除 ${summary.out || 0}</span>`;
@@ -1701,6 +2020,7 @@
           tile.addEventListener("dblclick", () => window.open(encodeURI(`images/${item.file}`), "_blank"));
           caption.append(filename, actions);
           if (canManageImages()) caption.append(imageAdmin);
+          caption.append(productNode);
           caption.append(descriptionNode, voteSummary, noteInput);
           tile.append(imageWrap, number, status, caption);
           stage.append(tile);
@@ -1721,6 +2041,7 @@
           addCsvSection(rows, "图片汇总", [
             "序号",
             "文件名",
+            "产品标签",
             "图片说明",
             "入选数",
             "待定数",
@@ -1748,6 +2069,7 @@
           addCsvSection(rows, "投票明细", [
             "序号",
             "文件名",
+            "产品标签",
             "图片说明",
             "外发端",
             "筛选结果",
@@ -1760,6 +2082,7 @@
             "图片序号",
             "文件名",
             "新文件名",
+            "产品标签",
             "图片说明",
             "操作",
             "筛选结果",
@@ -1775,7 +2098,7 @@
       }
 
       function exportLogs() {
-        const rows = [["时间", "操作者", "图片序号", "文件名", "新文件名", "图片说明", "操作", "筛选结果", "留言", "原筛选结果", "原留言"], ...buildLogRows()];
+        const rows = [["时间", "操作者", "图片序号", "文件名", "新文件名", "产品标签", "图片说明", "操作", "筛选结果", "留言", "原筛选结果", "原留言"], ...buildLogRows()];
         downloadCsv(rows, "产品委员会包装投票日志.csv");
       }
 
@@ -1799,6 +2122,8 @@
         return [
           ["导出时间", formatTime(new Date().toISOString())],
           ["项目", projectId],
+          ["项目名称", projectInfo.name || projectId],
+          ["产品标签", currentProductTag || "全部产品"],
           ["图片总数", images.length],
           ["外发端总数", voters.length],
           ["已提交外发端数", voters.filter((voter) => Number(voter.submitCount || 0) > 0).length],
@@ -1815,6 +2140,7 @@
           return [
             String(index + 1).padStart(2, "0"),
             file,
+            productNameForFile(file),
             descriptions[file] || "",
             summary.keep || 0,
             summary.hold || 0,
@@ -1857,6 +2183,7 @@
             rows.push([
               String(index + 1).padStart(2, "0"),
               file,
+              productNameForFile(file),
               descriptions[file] || "",
               voterName(rowVoterId),
               labels[vote.mark] || "",
@@ -1876,6 +2203,7 @@
           imageNumber(event.file),
           event.file || "",
           event.nextFile || "",
+          event.productTag || imageProducts[event.file] || "",
           descriptions[event.file] || "",
           actionLabels[event.action] || event.action || "",
           labels[event.mark] || "",
@@ -1980,6 +2308,19 @@
         render();
       });
 
+      projectSearchInput.addEventListener("input", renderDecisionControls);
+      productSearchInput.addEventListener("input", renderDecisionControls);
+      projectSelect.addEventListener("change", () => switchProject(projectSelect.value));
+      productSelect.addEventListener("change", () => {
+        currentProductTag = normalizeProductTag(productSelect.value);
+        page = 0;
+        allEvents = [];
+        updateProductUrl();
+        loadRemoteState();
+      });
+      newProjectBtn.addEventListener("click", createProject);
+      newProductBtn.addEventListener("click", createProductTag);
+
       prevBtn.addEventListener("click", () => {
         page = Math.max(0, page - 1);
         render();
@@ -2034,6 +2375,7 @@
       });
 
       syncHostControls();
+      renderDecisionControls();
       render();
       loadRemoteState();
       window.setInterval(() => loadRemoteState({ silent: true }), syncIntervalMs);
