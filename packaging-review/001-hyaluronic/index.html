@@ -729,7 +729,7 @@
           <button class="button text" type="button" id="copyLinkBtn">复制本端链接</button>
           <button class="button text host-only" type="button" id="addImageBtn">新增图片</button>
           <button class="button text" type="button" id="logBtn">日志</button>
-          <button class="button text" type="button" id="exportBtn">导出</button>
+          <button class="button text" type="button" id="exportBtn">导出全部</button>
           <button class="button text" type="button" id="fullBtn">全屏</button>
         </div>
       </header>
@@ -1524,13 +1524,152 @@
         });
       }
 
-      function exportCsv() {
-        const rows = [["序号", "文件名", "外发端", "筛选结果", "留言", "更新时间"]];
+      async function exportAllStats() {
+        try {
+          setSyncLabel("导出统计中");
+          await loadRemoteState({ silent: true });
+          try {
+            await loadLogs();
+          } catch {
+            // Recent logs are still included if the full log request fails.
+          }
+          const rows = [];
+          addCsvSection(rows, "总览", ["项目", "数值"], buildOverviewRows());
+          addCsvSection(rows, "图片汇总", [
+            "序号",
+            "文件名",
+            "图片说明",
+            "入选数",
+            "待定数",
+            "排除数",
+            "总投票数",
+            "入选外发端",
+            "待定外发端",
+            "排除外发端",
+            "留言汇总",
+          ], buildImageSummaryRows());
+          addCsvSection(rows, "外发端汇总", [
+            "外发端",
+            "已用次数",
+            "使用上限",
+            "剩余次数",
+            "入选数",
+            "待定数",
+            "排除数",
+            "留言数",
+            "创建时间",
+            "最后更新时间",
+          ], buildVoterSummaryRows());
+          addCsvSection(rows, "投票明细", [
+            "序号",
+            "文件名",
+            "图片说明",
+            "外发端",
+            "筛选结果",
+            "留言",
+            "更新时间",
+          ], buildVoteDetailRows());
+          addCsvSection(rows, "日志明细", [
+            "时间",
+            "操作者",
+            "图片序号",
+            "文件名",
+            "新文件名",
+            "图片说明",
+            "操作",
+            "筛选结果",
+            "留言",
+            "原筛选结果",
+            "原留言",
+          ], buildLogRows());
+          downloadCsv(rows, "产品委员会包装全部统计.csv");
+          setSyncLabel("统计已导出");
+        } catch {
+          setSyncLabel("导出失败", true);
+        }
+      }
+
+      function exportLogs() {
+        const rows = [["时间", "操作者", "图片序号", "文件名", "新文件名", "图片说明", "操作", "筛选结果", "留言", "原筛选结果", "原留言"], ...buildLogRows()];
+        downloadCsv(rows, "产品委员会包装投票日志.csv");
+      }
+
+      function addCsvSection(rows, title, headers, sectionRows) {
+        if (rows.length) rows.push([]);
+        rows.push([title]);
+        rows.push(headers);
+        sectionRows.forEach((row) => rows.push(row));
+      }
+
+      function buildOverviewRows() {
+        const totals = Object.values(summaries).reduce(
+          (sum, item) => {
+            sum.keep += Number(item.keep || 0);
+            sum.hold += Number(item.hold || 0);
+            sum.out += Number(item.out || 0);
+            return sum;
+          },
+          { keep: 0, hold: 0, out: 0 },
+        );
+        return [
+          ["导出时间", formatTime(new Date().toISOString())],
+          ["项目", projectId],
+          ["图片总数", images.length],
+          ["外发端总数", voters.length],
+          ["入选总票数", totals.keep],
+          ["待定总票数", totals.hold],
+          ["排除总票数", totals.out],
+          ["日志条数", (allEvents.length ? allEvents : recentEvents).length],
+        ];
+      }
+
+      function buildImageSummaryRows() {
+        return images.map((file, index) => {
+          const summary = summaries[file] || {};
+          return [
+            String(index + 1).padStart(2, "0"),
+            file,
+            descriptions[file] || "",
+            summary.keep || 0,
+            summary.hold || 0,
+            summary.out || 0,
+            summary.total || 0,
+            voterNamesByMark(file, "keep"),
+            voterNamesByMark(file, "hold"),
+            voterNamesByMark(file, "out"),
+            notesForFile(file),
+          ];
+        });
+      }
+
+      function buildVoterSummaryRows() {
+        return voters.map((voter) => {
+          const counts = countVotesForVoter(voter.id);
+          const used = Number(voter.voteClickCount || 0);
+          const limit = usageLimitValue(voter);
+          return [
+            voter.name || voter.id,
+            used,
+            limit === null ? "不限" : limit,
+            limit === null ? "不限" : Math.max(0, limit - used),
+            counts.keep,
+            counts.hold,
+            counts.out,
+            counts.notes,
+            voter.createdAt || "",
+            voter.updatedAt || "",
+          ];
+        });
+      }
+
+      function buildVoteDetailRows() {
+        const rows = [];
         images.forEach((file, index) => {
           Object.entries(allVotes[file] || {}).forEach(([rowVoterId, vote]) => {
             rows.push([
               String(index + 1).padStart(2, "0"),
               file,
+              descriptions[file] || "",
               voterName(rowVoterId),
               labels[vote.mark] || "",
               vote.note || "",
@@ -1538,28 +1677,52 @@
             ]);
           });
         });
-        downloadCsv(rows, "产品委员会包装投票明细.csv");
+        return rows;
       }
 
-      function exportLogs() {
+      function buildLogRows() {
         const events = allEvents.length ? allEvents.slice().reverse() : recentEvents.slice().reverse();
-        const rows = [["时间", "操作者", "图片序号", "文件名", "新文件名", "图片说明", "操作", "筛选结果", "留言", "原筛选结果", "原留言"]];
-        events.forEach((event) => {
-          rows.push([
-            event.at || "",
-            eventActor(event),
-            imageNumber(event.file),
-            event.file || "",
-            event.nextFile || "",
-            descriptions[event.file] || "",
-            actionLabels[event.action] || event.action || "",
-            labels[event.mark] || "",
-            event.note || "",
-            labels[event.previousMark] || "",
-            event.previousNote || "",
-          ]);
-        });
-        downloadCsv(rows, "产品委员会包装投票日志.csv");
+        return events.map((event) => [
+          event.at || "",
+          eventActor(event),
+          imageNumber(event.file),
+          event.file || "",
+          event.nextFile || "",
+          descriptions[event.file] || "",
+          actionLabels[event.action] || event.action || "",
+          labels[event.mark] || "",
+          event.note || "",
+          labels[event.previousMark] || "",
+          event.previousNote || "",
+        ]);
+      }
+
+      function voterNamesByMark(file, mark) {
+        return Object.entries(allVotes[file] || {})
+          .filter(([, vote]) => vote.mark === mark)
+          .map(([rowVoterId]) => voterName(rowVoterId))
+          .join("；");
+      }
+
+      function notesForFile(file) {
+        return Object.entries(allVotes[file] || {})
+          .filter(([, vote]) => vote.note)
+          .map(([rowVoterId, vote]) => `${voterName(rowVoterId)}：${vote.note}`)
+          .join("；");
+      }
+
+      function countVotesForVoter(rowVoterId) {
+        return images.reduce(
+          (counts, file) => {
+            const vote = allVotes[file]?.[rowVoterId];
+            if (!vote) return counts;
+            const mark = vote.mark || "";
+            if (counts[mark] !== undefined) counts[mark] += 1;
+            if (vote.note) counts.notes += 1;
+            return counts;
+          },
+          { keep: 0, hold: 0, out: 0, notes: 0 },
+        );
       }
 
       function downloadCsv(rows, filename) {
@@ -1648,7 +1811,7 @@
       logBtn.addEventListener("click", openLogs);
       closeLogBtn.addEventListener("click", () => logPanel.classList.remove("open"));
       closeVoterPanelBtn.addEventListener("click", () => voterPanel.classList.remove("open"));
-      exportBtn.addEventListener("click", exportCsv);
+      exportBtn.addEventListener("click", exportAllStats);
       exportLogsBtn.addEventListener("click", async () => {
         try {
           await loadLogs();
