@@ -79,6 +79,10 @@ createServer(async (req, res) => {
       await handlePackagingReviewVoter(req, res);
       return;
     }
+    if (req.method === "POST" && url.pathname === "/api/packaging-review/voter-settings") {
+      await handlePackagingReviewVoterSettings(req, res);
+      return;
+    }
     if (req.method === "POST" && url.pathname === "/api/packaging-review/vote") {
       await handlePackagingReviewVote(req, res);
       return;
@@ -231,6 +235,8 @@ async function handlePackagingReviewVoter(req, res) {
   projectState.voters[voterId] = {
     id: voterId,
     name,
+    usageLimit: normalizeUsageLimit(body.usageLimit),
+    voteClickCount: 0,
     createdAt: now,
     updatedAt: now,
   };
@@ -246,6 +252,47 @@ async function handlePackagingReviewVoter(req, res) {
     ...buildReviewPayload(project, state, { voterId, req }),
     link: buildVoterLink(req, project, voterId),
   });
+}
+
+async function handlePackagingReviewVoterSettings(req, res) {
+  const body = await readJsonBody(req, 64 * 1024);
+  const project = normalizeReviewProject(body.project);
+  const voterId = normalizeVoterId(body.voter);
+  if (!voterId) {
+    sendJson(res, 400, { ok: false, error: "Invalid voter." });
+    return;
+  }
+
+  const state = readPackagingReviewState();
+  const projectState = getReviewProjectState(state, project);
+  const voter = projectState.voters[voterId];
+  if (!voter) {
+    sendJson(res, 404, { ok: false, error: "Voter not found." });
+    return;
+  }
+
+  const usageLimit = normalizeUsageLimit(body.usageLimit);
+  const previousUsageLimit = normalizeUsageLimit(voter.usageLimit);
+  if (previousUsageLimit === usageLimit) {
+    sendJson(res, 200, buildReviewPayload(project, state));
+    return;
+  }
+
+  const now = new Date().toISOString();
+  voter.usageLimit = usageLimit;
+  voter.updatedAt = now;
+  projectState.updatedAt = now;
+  appendReviewEvent(projectState, {
+    action: "update-voter-usage",
+    voterId,
+    voterName: voter.name,
+    usageLimit,
+    previousUsageLimit,
+    note: formatUsageLimitText(usageLimit),
+    previousNote: formatUsageLimitText(previousUsageLimit),
+  });
+  writePackagingReviewState(state);
+  sendJson(res, 200, buildReviewPayload(project, state));
 }
 
 async function handlePackagingReviewVote(req, res) {
@@ -270,6 +317,11 @@ async function handlePackagingReviewVote(req, res) {
   const voter = projectState.voters[voterId];
   if (!voter) {
     sendJson(res, 404, { ok: false, error: "Voter not found." });
+    return;
+  }
+
+  if (recordClick && isUsageLimitReached(voter)) {
+    sendJson(res, 403, { ok: false, error: "使用次数已用完。" });
     return;
   }
 
@@ -302,6 +354,7 @@ async function handlePackagingReviewVote(req, res) {
     delete projectState.votes[file];
   }
 
+  if (recordClick) voter.voteClickCount = Number(voter.voteClickCount || 0) + 1;
   voter.updatedAt = now;
   projectState.updatedAt = now;
   appendReviewEvent(projectState, {
@@ -541,6 +594,24 @@ function normalizeReviewMark(value) {
   return ["keep", "hold", "out"].includes(mark) ? mark : "";
 }
 
+function normalizeUsageLimit(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const limit = Number(value);
+  if (!Number.isFinite(limit)) return null;
+  return Math.max(0, Math.min(99999, Math.floor(limit)));
+}
+
+function isUsageLimitReached(voter) {
+  const usageLimit = normalizeUsageLimit(voter.usageLimit);
+  if (usageLimit === null) return false;
+  return Number(voter.voteClickCount || 0) >= usageLimit;
+}
+
+function formatUsageLimitText(value) {
+  const usageLimit = normalizeUsageLimit(value);
+  return usageLimit === null ? "不限" : `${usageLimit} 次`;
+}
+
 function createReviewId() {
   return randomBytes(8).toString("hex");
 }
@@ -576,6 +647,10 @@ function getReviewProjectState(state, project) {
   if (!projectState.voters || typeof projectState.voters !== "object") projectState.voters = {};
   if (!projectState.votes || typeof projectState.votes !== "object") projectState.votes = {};
   if (!Array.isArray(projectState.events)) projectState.events = [];
+  Object.values(projectState.voters).forEach((voter) => {
+    voter.usageLimit = normalizeUsageLimit(voter.usageLimit);
+    voter.voteClickCount = Math.max(0, Math.floor(Number(voter.voteClickCount || 0)));
+  });
 
   if (projectState.items && typeof projectState.items === "object" && Object.keys(projectState.items).length) {
     const voterId = "legacy0001";
@@ -583,6 +658,8 @@ function getReviewProjectState(state, project) {
       projectState.voters[voterId] = {
         id: voterId,
         name: "历史同步结果",
+        usageLimit: null,
+        voteClickCount: 0,
         createdAt: projectState.updatedAt || new Date().toISOString(),
         updatedAt: projectState.updatedAt || new Date().toISOString(),
       };

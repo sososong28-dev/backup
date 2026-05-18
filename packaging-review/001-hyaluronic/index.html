@@ -449,7 +449,23 @@
         box-shadow: -18px 0 40px rgba(24, 24, 24, 0.16);
       }
 
+      .voter-panel {
+        position: fixed;
+        inset: 0 0 0 auto;
+        z-index: 21;
+        display: none;
+        width: min(640px, 100%);
+        border-left: 1px solid var(--line);
+        background: var(--panel);
+        box-shadow: -18px 0 40px rgba(24, 24, 24, 0.16);
+      }
+
       .log-panel.open {
+        display: grid;
+        grid-template-rows: auto 1fr;
+      }
+
+      .voter-panel.open {
         display: grid;
         grid-template-rows: auto 1fr;
       }
@@ -477,6 +493,54 @@
         min-height: 0;
         overflow: auto;
         padding: 10px 12px 16px;
+      }
+
+      .voter-list {
+        min-height: 0;
+        overflow: auto;
+        padding: 10px 12px 16px;
+      }
+
+      .voter-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 120px auto auto;
+        gap: 8px;
+        align-items: center;
+        padding: 10px 0;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+      }
+
+      .voter-main {
+        min-width: 0;
+      }
+
+      .voter-main strong,
+      .voter-main span {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .voter-main span,
+      .usage-readonly {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .usage-input {
+        width: 100%;
+        height: 34px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 0 8px;
+        outline: 0;
+        background: #ffffff;
+      }
+
+      .usage-input:focus {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.16);
       }
 
       .log-row {
@@ -551,6 +615,10 @@
           min-height: 320px;
         }
 
+        .voter-row {
+          grid-template-columns: 1fr;
+        }
+
         .caption {
           grid-template-columns: 1fr;
           gap: 7px;
@@ -597,6 +665,7 @@
             <span>每屏 10 张</span>
             <span id="resultLabel">入选 0 / 待定 0 / 排除 0</span>
             <span class="voter-pill" id="voterLabel">主页面</span>
+            <span id="usageLabel">使用次数：主页面设置</span>
             <span class="sync-state" id="syncLabel">连接服务器</span>
           </div>
         </div>
@@ -616,6 +685,7 @@
             <button class="button icon" type="button" id="nextBtn" title="下一屏">›</button>
           </div>
           <button class="button text" type="button" id="createVoterBtn">新增外发端</button>
+          <button class="button text host-only" type="button" id="voterSettingsBtn">分发设置</button>
           <button class="button text" type="button" id="copyLinkBtn">复制本端链接</button>
           <button class="button text host-only" type="button" id="addImageBtn">新增图片</button>
           <button class="button text" type="button" id="logBtn">日志</button>
@@ -637,6 +707,15 @@
         </div>
       </div>
       <div class="log-list" id="logList"></div>
+    </aside>
+    <aside class="voter-panel" id="voterPanel" aria-label="分发设置">
+      <div class="log-head">
+        <strong>分发设置</strong>
+        <div class="log-actions">
+          <button class="button text" type="button" id="closeVoterPanelBtn">关闭</button>
+        </div>
+      </div>
+      <div class="voter-list" id="voterList"></div>
     </aside>
 
     <script>
@@ -678,6 +757,7 @@
       const pageSize = 10;
       const projectId = "001-hyaluronic";
       const voterUrl = "/api/packaging-review/voter";
+      const voterSettingsUrl = "/api/packaging-review/voter-settings";
       let images = initialImages.slice();
       const voteUrl = "/api/packaging-review/vote";
       const imageUrl = "/api/packaging-review/image";
@@ -692,6 +772,7 @@
         cancel: "取消",
         note: "留言",
         update: "更新",
+        "update-voter-usage": "修改使用次数",
         "image-add": "新增图片",
         "image-replace": "替换图片",
         "image-rename": "修改图片",
@@ -720,12 +801,14 @@
       const countLabel = document.querySelector("#countLabel");
       const resultLabel = document.querySelector("#resultLabel");
       const voterLabel = document.querySelector("#voterLabel");
+      const usageLabel = document.querySelector("#usageLabel");
       const syncLabel = document.querySelector("#syncLabel");
       const pageLabel = document.querySelector("#pageLabel");
       const searchInput = document.querySelector("#searchInput");
       const prevBtn = document.querySelector("#prevBtn");
       const nextBtn = document.querySelector("#nextBtn");
       const createVoterBtn = document.querySelector("#createVoterBtn");
+      const voterSettingsBtn = document.querySelector("#voterSettingsBtn");
       const copyLinkBtn = document.querySelector("#copyLinkBtn");
       const addImageBtn = document.querySelector("#addImageBtn");
       const addImageInput = document.querySelector("#addImageInput");
@@ -737,6 +820,9 @@
       const logList = document.querySelector("#logList");
       const closeLogBtn = document.querySelector("#closeLogBtn");
       const exportLogsBtn = document.querySelector("#exportLogsBtn");
+      const voterPanel = document.querySelector("#voterPanel");
+      const voterList = document.querySelector("#voterList");
+      const closeVoterPanelBtn = document.querySelector("#closeVoterPanelBtn");
 
       function stateUrl() {
         const params = new URLSearchParams({ project: projectId });
@@ -754,11 +840,38 @@
       }
 
       function canVote() {
-        return Boolean(voterId && currentVoter);
+        return Boolean(voterId && currentVoter && hasUsageRemaining(currentVoter));
+      }
+
+      function hasUsageRemaining(voter) {
+        const limit = usageLimitValue(voter);
+        if (limit === null) return true;
+        return Number(voter?.voteClickCount || 0) < limit;
+      }
+
+      function usageLimitValue(voter) {
+        const value = voter?.usageLimit;
+        return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : null;
+      }
+
+      function usageText(voter) {
+        if (!voter) return "使用次数：主页面设置";
+        const used = Number(voter.voteClickCount || 0);
+        const limit = usageLimitValue(voter);
+        return `使用次数：${used} / ${limit === null ? "不限" : limit}`;
+      }
+
+      function parseUsageLimit(value) {
+        const text = String(value || "").trim();
+        if (!text) return null;
+        const parsed = Number(text);
+        if (!Number.isFinite(parsed)) return null;
+        return Math.max(0, Math.min(99999, Math.floor(parsed)));
       }
 
       function syncHostControls() {
         addImageBtn.classList.toggle("is-hidden", !canManageImages());
+        voterSettingsBtn.classList.toggle("is-hidden", !canManageImages());
       }
 
       function mergeRemoteImages(remoteImages) {
@@ -797,11 +910,19 @@
         countLabel.textContent = `共 ${images.length} 张`;
         resultLabel.textContent = `入选 ${totals.keep} / 待定 ${totals.hold} / 排除 ${totals.out}`;
         voterLabel.textContent = currentVoter ? `当前：${currentVoter.name}` : voterId ? "分发链接无效" : "主页面";
+        usageLabel.textContent = currentVoter ? usageText(currentVoter) : "使用次数：主页面设置";
+        usageLabel.classList.toggle("sync-state", Boolean(currentVoter));
+        usageLabel.classList.toggle("error", Boolean(currentVoter && !hasUsageRemaining(currentVoter)));
       }
 
       function setMark(file, value) {
         if (!canVote()) {
-          setSyncLabel(voterId ? "分发链接无效，无法投票" : "主页面无法投票，请使用分发链接", true);
+          const message = currentVoter
+            ? "使用次数已用完"
+            : voterId
+              ? "分发链接无效，无法投票"
+              : "主页面无法投票，请使用分发链接";
+          setSyncLabel(message, true);
           return;
         }
         marks[file] = value;
@@ -871,6 +992,7 @@
           updateSummary();
         }
         syncHostControls();
+        renderVoterPanel();
         renderLogs();
       }
 
@@ -892,12 +1014,14 @@
         const fallbackName = `外发端${voters.length + 1}`;
         const name = window.prompt("外发端名称", fallbackName);
         if (name === null) return;
+        const usageLimitText = window.prompt("使用次数，留空为不限", "");
+        if (usageLimitText === null) return;
         try {
           setSyncLabel("生成链接中");
           const response = await fetch(voterUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ project: projectId, name }),
+            body: JSON.stringify({ project: projectId, name, usageLimit: parseUsageLimit(usageLimitText) }),
           });
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           const payload = await response.json();
@@ -1079,6 +1203,90 @@
         }
       }
 
+      async function openVoterPanel() {
+        if (!canManageImages()) return;
+        voterPanel.classList.add("open");
+        renderVoterPanel();
+        await loadRemoteState({ silent: true });
+      }
+
+      function renderVoterPanel() {
+        if (!voterPanel.classList.contains("open")) return;
+        if (!voters.length) {
+          voterList.innerHTML = '<div class="log-row"><span class="muted">暂无分发端</span></div>';
+          return;
+        }
+        voterList.innerHTML = "";
+        voters.forEach((voter) => {
+          const row = document.createElement("div");
+          row.className = "voter-row";
+
+          const main = document.createElement("div");
+          main.className = "voter-main";
+          const name = document.createElement("strong");
+          name.textContent = voter.name || voter.id;
+          const usage = document.createElement("span");
+          usage.textContent = usageText(voter).replace("使用次数：", "已用 ");
+          main.append(name, usage);
+
+          const input = document.createElement("input");
+          input.className = "usage-input";
+          input.type = "number";
+          input.min = "0";
+          input.max = "99999";
+          input.placeholder = "不限";
+          const limit = usageLimitValue(voter);
+          input.value = limit === null ? "" : String(limit);
+          input.dataset.voter = voter.id;
+
+          const save = document.createElement("button");
+          save.className = "button text";
+          save.type = "button";
+          save.textContent = "保存";
+          save.addEventListener("click", () => updateVoterUsage(voter.id, input.value));
+
+          const copy = document.createElement("button");
+          copy.className = "button text";
+          copy.type = "button";
+          copy.textContent = "复制";
+          copy.addEventListener("click", async () => {
+            await copyText(buildVoterShareLink(voter.id));
+            setSyncLabel("分发链接已复制");
+          });
+
+          row.append(main, input, save, copy);
+          voterList.append(row);
+        });
+      }
+
+      function buildVoterShareLink(rowVoterId) {
+        const url = new URL(window.location.href);
+        url.search = "";
+        url.searchParams.set("voter", rowVoterId);
+        return url.toString();
+      }
+
+      async function updateVoterUsage(rowVoterId, value) {
+        try {
+          setSyncLabel("保存使用次数中");
+          const response = await fetch(voterSettingsUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              project: projectId,
+              voter: rowVoterId,
+              usageLimit: parseUsageLimit(value),
+            }),
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+          applyRemoteState(payload, true);
+          setSyncLabel("使用次数已保存");
+        } catch (error) {
+          setSyncLabel(error.message || "保存失败", true);
+        }
+      }
+
       function render() {
         updateSummary();
         const items = getFilteredImages();
@@ -1177,7 +1385,13 @@
           noteInput.className = "note-input";
           noteInput.type = "text";
           noteInput.maxLength = 60;
-          noteInput.placeholder = votingEnabled ? "一句话留言" : voterId ? "分发链接无效，无法留言" : "主页面不记录留言";
+          noteInput.placeholder = votingEnabled
+            ? "一句话留言"
+            : currentVoter
+              ? "使用次数已用完"
+              : voterId
+                ? "分发链接无效，无法留言"
+                : "主页面不记录留言";
           noteInput.dataset.file = item.file;
           noteInput.value = notes[item.file] || "";
           noteInput.disabled = !votingEnabled;
@@ -1310,12 +1524,14 @@
       });
 
       createVoterBtn.addEventListener("click", createVoter);
+      voterSettingsBtn.addEventListener("click", openVoterPanel);
       copyLinkBtn.addEventListener("click", copyCurrentLink);
       addImageBtn.addEventListener("click", () => addImageInput.click());
       addImageInput.addEventListener("change", () => addImages(Array.from(addImageInput.files || [])));
       replaceImageInput.addEventListener("change", () => replaceImage(pendingReplaceFile, replaceImageInput.files?.[0]));
       logBtn.addEventListener("click", openLogs);
       closeLogBtn.addEventListener("click", () => logPanel.classList.remove("open"));
+      closeVoterPanelBtn.addEventListener("click", () => voterPanel.classList.remove("open"));
       exportBtn.addEventListener("click", exportCsv);
       exportLogsBtn.addEventListener("click", async () => {
         try {
