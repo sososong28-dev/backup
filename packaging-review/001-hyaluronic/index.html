@@ -1,0 +1,1089 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex,nofollow" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f766e'/%3E%3Cpath d='M8 17h16v3H8zM8 11h16v3H8z' fill='white'/%3E%3C/svg%3E"
+    />
+    <title>产品委员会包装筛选展示</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --page: #f5f1e8;
+        --ink: #171717;
+        --muted: #6d6a63;
+        --line: #d6d0c2;
+        --panel: #fffdf8;
+        --accent: #0f766e;
+        --accent-ink: #ffffff;
+        --hold: #b45309;
+        --out: #a33434;
+        --shadow: 0 14px 34px rgba(24, 24, 24, 0.12);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          "Microsoft YaHei", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 100%;
+        min-width: 100%;
+        height: 100%;
+        margin: 0;
+      }
+
+      body {
+        overflow: hidden;
+        color: var(--ink);
+        background:
+          linear-gradient(90deg, rgba(15, 118, 110, 0.08), transparent 28%),
+          linear-gradient(180deg, #fbf8f1, var(--page));
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      .app {
+        display: grid;
+        grid-template-rows: auto 1fr;
+        height: 100dvh;
+      }
+
+      .topbar {
+        display: grid;
+        grid-template-columns: minmax(230px, 1fr) auto;
+        gap: 16px;
+        align-items: center;
+        min-height: 74px;
+        padding: 12px 18px 10px;
+        border-bottom: 1px solid var(--line);
+        background: rgba(255, 253, 248, 0.94);
+      }
+
+      .title {
+        min-width: 0;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 22px;
+        font-weight: 760;
+        line-height: 1.12;
+        letter-spacing: 0;
+      }
+
+      .meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 6px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.2;
+      }
+
+      .sync-state {
+        color: var(--accent);
+        font-weight: 700;
+      }
+
+      .sync-state.error {
+        color: var(--out);
+      }
+
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+
+      .segmented,
+      .pager,
+      .searchbox {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        height: 38px;
+        padding: 4px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+      }
+
+      .searchbox {
+        width: 220px;
+        padding-inline: 10px;
+      }
+
+      .searchbox input {
+        width: 100%;
+        min-width: 0;
+        border: 0;
+        outline: 0;
+        color: var(--ink);
+        background: transparent;
+      }
+
+      .button {
+        display: inline-grid;
+        min-width: 34px;
+        height: 30px;
+        place-items: center;
+        border: 0;
+        border-radius: 6px;
+        color: var(--ink);
+        background: transparent;
+        cursor: pointer;
+      }
+
+      .button:hover {
+        background: #eee7db;
+      }
+
+      .button.active {
+        color: var(--accent-ink);
+        background: var(--accent);
+      }
+
+      .button.text {
+        padding: 0 10px;
+      }
+
+      .button.icon {
+        font-size: 18px;
+        line-height: 1;
+      }
+
+      .page-label {
+        min-width: 70px;
+        color: var(--muted);
+        font-size: 13px;
+        text-align: center;
+      }
+
+      .stage {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        grid-template-rows: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        min-height: 0;
+        padding: 12px;
+      }
+
+      .tile {
+        position: relative;
+        display: grid;
+        grid-template-rows: minmax(0, 1fr) auto;
+        min-width: 0;
+        min-height: 0;
+        overflow: hidden;
+        border: 2px solid transparent;
+        border-radius: 8px;
+        background:
+          linear-gradient(45deg, rgba(0, 0, 0, 0.025) 25%, transparent 25%),
+          linear-gradient(-45deg, rgba(0, 0, 0, 0.025) 25%, transparent 25%),
+          linear-gradient(45deg, transparent 75%, rgba(0, 0, 0, 0.025) 75%),
+          linear-gradient(-45deg, transparent 75%, rgba(0, 0, 0, 0.025) 75%),
+          #ffffff;
+        background-position:
+          0 0,
+          0 8px,
+          8px -8px,
+          -8px 0;
+        background-size: 16px 16px;
+        box-shadow: var(--shadow);
+      }
+
+      .tile.keep {
+        border-color: var(--accent);
+      }
+
+      .tile.hold {
+        border-color: var(--hold);
+      }
+
+      .tile.out {
+        border-color: var(--out);
+        opacity: 0.76;
+      }
+
+      .image-wrap {
+        display: grid;
+        min-height: 0;
+        place-items: center;
+        padding: 30px 10px 8px;
+      }
+
+      .image-wrap img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+      }
+
+      .number {
+        position: absolute;
+        top: 8px;
+        left: 8px;
+        display: inline-grid;
+        min-width: 42px;
+        height: 28px;
+        place-items: center;
+        border-radius: 6px;
+        color: #fff;
+        background: rgba(23, 23, 23, 0.88);
+        font-size: 15px;
+        font-weight: 800;
+      }
+
+      .status {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        display: none;
+        height: 28px;
+        align-items: center;
+        padding: 0 9px;
+        border-radius: 6px;
+        color: #fff;
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .tile.keep .status,
+      .tile.hold .status,
+      .tile.out .status {
+        display: inline-flex;
+      }
+
+      .tile.keep .status {
+        background: var(--accent);
+      }
+
+      .tile.hold .status {
+        background: var(--hold);
+      }
+
+      .tile.out .status {
+        background: var(--out);
+      }
+
+      .caption {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        grid-template-rows: auto auto;
+        gap: 8px;
+        align-items: center;
+        min-height: 86px;
+        padding: 8px;
+        border-top: 1px solid rgba(0, 0, 0, 0.08);
+        background: rgba(255, 253, 248, 0.92);
+      }
+
+      .filename {
+        min-width: 0;
+        overflow: hidden;
+        color: #34322e;
+        font-size: 12px;
+        font-weight: 650;
+        line-height: 1.25;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .actions {
+        display: grid;
+        grid-template-columns: repeat(3, 28px);
+        gap: 4px;
+      }
+
+      .vote-summary {
+        grid-column: 1 / -1;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.2;
+      }
+
+      .vote-summary span {
+        display: inline-flex;
+        align-items: center;
+        height: 22px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 0 7px;
+        background: rgba(255, 255, 255, 0.74);
+      }
+
+      .voter-pill {
+        color: var(--accent);
+        font-weight: 700;
+      }
+
+      .mark:disabled,
+      .note-input:disabled {
+        cursor: not-allowed;
+        opacity: 0.52;
+      }
+
+      .note-input {
+        grid-column: 1 / -1;
+        width: 100%;
+        height: 30px;
+        min-width: 0;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 0 9px;
+        outline: 0;
+        color: var(--ink);
+        background: #ffffff;
+        font-size: 12px;
+      }
+
+      .note-input:focus {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.16);
+      }
+
+      .mark {
+        width: 28px;
+        height: 28px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        color: #4a4842;
+        background: #ffffff;
+        cursor: pointer;
+      }
+
+      .mark:hover {
+        border-color: #8f887b;
+      }
+
+      .mark.keep.active {
+        border-color: var(--accent);
+        color: #fff;
+        background: var(--accent);
+      }
+
+      .mark.hold.active {
+        border-color: var(--hold);
+        color: #fff;
+        background: var(--hold);
+      }
+
+      .mark.out.active {
+        border-color: var(--out);
+        color: #fff;
+        background: var(--out);
+      }
+
+      .empty {
+        display: none;
+        place-items: center;
+        height: 100%;
+        color: var(--muted);
+        font-size: 18px;
+      }
+
+      .stage.is-empty {
+        display: none;
+      }
+
+      .empty.is-visible {
+        display: grid;
+      }
+
+      .log-panel {
+        position: fixed;
+        inset: 0 0 0 auto;
+        z-index: 20;
+        display: none;
+        width: min(760px, 100%);
+        border-left: 1px solid var(--line);
+        background: var(--panel);
+        box-shadow: -18px 0 40px rgba(24, 24, 24, 0.16);
+      }
+
+      .log-panel.open {
+        display: grid;
+        grid-template-rows: auto 1fr;
+      }
+
+      .log-head {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .log-head strong {
+        font-size: 18px;
+      }
+
+      .log-actions {
+        display: flex;
+        gap: 8px;
+      }
+
+      .log-list {
+        min-height: 0;
+        overflow: auto;
+        padding: 10px 12px 16px;
+      }
+
+      .log-row {
+        display: grid;
+        grid-template-columns: 126px 88px 1fr;
+        gap: 8px;
+        align-items: start;
+        padding: 9px 0;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+        font-size: 13px;
+        line-height: 1.35;
+      }
+
+      .log-row .muted {
+        color: var(--muted);
+      }
+
+      @media (max-width: 1080px) {
+        body {
+          overflow: auto;
+        }
+
+        .app {
+          min-height: 100dvh;
+          height: auto;
+        }
+
+        .topbar {
+          grid-template-columns: 1fr;
+        }
+
+        .toolbar {
+          justify-content: flex-start;
+        }
+
+        .stage {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          grid-template-rows: repeat(5, minmax(190px, 1fr));
+          height: auto;
+          min-height: calc(100dvh - 130px);
+        }
+      }
+
+      @media (max-width: 620px) {
+        .topbar {
+          padding-inline: 10px;
+        }
+
+        .toolbar,
+        .segmented,
+        .pager,
+        .searchbox {
+          width: 100%;
+        }
+
+        .toolbar {
+          display: grid;
+          grid-template-columns: 1fr;
+        }
+
+        .segmented,
+        .pager {
+          justify-content: space-between;
+        }
+
+        .stage {
+          grid-template-columns: 1fr;
+          grid-template-rows: none;
+        }
+
+        .tile {
+          min-height: 320px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <header class="topbar">
+        <div class="title">
+          <h1>产品委员会包装筛选展示</h1>
+          <div class="meta">
+            <span id="countLabel">共 0 张</span>
+            <span>每屏 10 张</span>
+            <span id="resultLabel">入选 0 / 待定 0 / 排除 0</span>
+            <span class="voter-pill" id="voterLabel">主持视图</span>
+            <span class="sync-state" id="syncLabel">连接服务器</span>
+          </div>
+        </div>
+        <div class="toolbar" aria-label="筛选与翻页">
+          <div class="searchbox">
+            <input id="searchInput" type="search" placeholder="搜索文件名/留言" autocomplete="off" />
+          </div>
+          <div class="segmented" role="tablist" aria-label="结果筛选">
+            <button class="button text active" type="button" data-filter="all">全部</button>
+            <button class="button text" type="button" data-filter="keep">入选</button>
+            <button class="button text" type="button" data-filter="hold">待定</button>
+            <button class="button text" type="button" data-filter="out">排除</button>
+          </div>
+          <div class="pager">
+            <button class="button icon" type="button" id="prevBtn" title="上一屏">‹</button>
+            <span class="page-label" id="pageLabel">1 / 1</span>
+            <button class="button icon" type="button" id="nextBtn" title="下一屏">›</button>
+          </div>
+          <button class="button text" type="button" id="createVoterBtn">新增外发端</button>
+          <button class="button text" type="button" id="copyLinkBtn">复制本端链接</button>
+          <button class="button text" type="button" id="logBtn">日志</button>
+          <button class="button text" type="button" id="exportBtn">导出</button>
+          <button class="button text" type="button" id="fullBtn">全屏</button>
+        </div>
+      </header>
+      <section class="stage" id="stage" aria-label="包装图片展示"></section>
+      <section class="empty" id="empty">没有匹配的图片</section>
+    </main>
+    <aside class="log-panel" id="logPanel" aria-label="投票日志">
+      <div class="log-head">
+        <strong>投票日志</strong>
+        <div class="log-actions">
+          <button class="button text" type="button" id="exportLogsBtn">导出日志</button>
+          <button class="button text" type="button" id="closeLogBtn">关闭</button>
+        </div>
+      </div>
+      <div class="log-list" id="logList"></div>
+    </aside>
+
+    <script>
+      const images = [
+        "水膜001结构.png",
+        "水膜001.png",
+        "水感膜结构.png",
+        "水感膜001.png",
+        "云感膜结构.png",
+        "云感膜.png",
+        "ChatGPT Image 2026年5月18日 下午06_05_46.png",
+        "ChatGPT Image 2026年5月18日 下午05_00_49.png",
+        "27986006531_221718034067_file_00000000e364720897fe001b115305f7 (1).png",
+        "27986006531_221718019154_file_00000000e364720897fe001b115305f7.png",
+        "27986006531_221717931555_file_00000000c1687208b17383fadd28664a (1).png",
+        "27986006531_221717917160_file_00000000c1687208b17383fadd28664a.png",
+        "27986006531_221717914627_file_00000000d32c7208be31a40921b5a117.png",
+        "27986006531_221717770650_file_00000000d32c7208be31a40921b5a117 (1).png",
+        "27986006531_221717766030_file_00000000c10471f69c4c27856ca7b4fc.png",
+        "27986006531_221717728686_file_00000000230871f6844109b3defb27be.png",
+        "27986006531_221717645541_file_00000000447871f6bb0deb2c2a88719c.png",
+        "27986006531_221717570257_file_00000000ad9471f6ba8fbad06f034a96.png",
+        "27986006531_221717544969_file_0000000091b87207909d1090d14ed2b0.png",
+        "27986006531_221717538807_file_00000000355c71f683b10bd966f97cf7.png",
+        "27986006531_221717532098_file_00000000972c72069649425a39fcce7b.png",
+        "27986006531_221717532076_file_00000000d9287207a7a8bdcc7f00d82f.png",
+        "27986006531_221717527122_file_0000000017a871f6804c4516013a8e84.png",
+        "27986006531_221717525313_file_00000000978c71f6893e99a7fb9ddeed.png",
+        "27986006531_221717515310_file_00000000faf87207906ce0b4fdea35b0.png",
+        "27986006531_221717513299_file_00000000f58071f6bc93e8f1859c777b.png",
+        "27986006531_221717468332_file_00000000b9707207b0e25b86342fe317.png",
+        "27986006531_221717449771_file_0000000015e07209876bb77d57c427ba.png",
+        "27986006531_221717421564_file_00000000ff3c722fad3709f72509e2ae.png",
+        "27986006531_221717418876_file_00000000b28872079b6f275a0cd92a4b.png",
+        "177909927584727986006531_221717518959_file_00000000140c71f6a3f6515ee5d204d7.png",
+        "177909920652027986006531_221717596802_file_00000000c2207208a4f256417eb85f4b.png",
+      ];
+
+      const pageSize = 10;
+      const projectId = "001-hyaluronic";
+      const voterUrl = "/api/packaging-review/voter";
+      const voteUrl = "/api/packaging-review/vote";
+      const logsUrl = `/api/packaging-review/logs?project=${encodeURIComponent(projectId)}`;
+      const syncIntervalMs = 2500;
+      const labels = { keep: "入选", hold: "待定", out: "排除" };
+      const actionLabels = {
+        "create-voter": "新增外发端",
+        vote: "投票",
+        "change-vote": "改票",
+        cancel: "取消",
+        note: "留言",
+        update: "更新",
+      };
+      const urlParams = new URLSearchParams(window.location.search);
+      let voterId = urlParams.get("voter") || "";
+      let page = 0;
+      let filter = "all";
+      let searchText = "";
+      let marks = {};
+      let notes = {};
+      let summaries = {};
+      let allVotes = {};
+      let voters = [];
+      let currentVoter = null;
+      let recentEvents = [];
+      let allEvents = [];
+      let noteTimers = new Map();
+
+      const stage = document.querySelector("#stage");
+      const empty = document.querySelector("#empty");
+      const countLabel = document.querySelector("#countLabel");
+      const resultLabel = document.querySelector("#resultLabel");
+      const voterLabel = document.querySelector("#voterLabel");
+      const syncLabel = document.querySelector("#syncLabel");
+      const pageLabel = document.querySelector("#pageLabel");
+      const searchInput = document.querySelector("#searchInput");
+      const prevBtn = document.querySelector("#prevBtn");
+      const nextBtn = document.querySelector("#nextBtn");
+      const createVoterBtn = document.querySelector("#createVoterBtn");
+      const copyLinkBtn = document.querySelector("#copyLinkBtn");
+      const logBtn = document.querySelector("#logBtn");
+      const exportBtn = document.querySelector("#exportBtn");
+      const fullBtn = document.querySelector("#fullBtn");
+      const logPanel = document.querySelector("#logPanel");
+      const logList = document.querySelector("#logList");
+      const closeLogBtn = document.querySelector("#closeLogBtn");
+      const exportLogsBtn = document.querySelector("#exportLogsBtn");
+
+      function stateUrl() {
+        const params = new URLSearchParams({ project: projectId });
+        if (voterId) params.set("voter", voterId);
+        return `/api/packaging-review/state?${params.toString()}`;
+      }
+
+      function setSyncLabel(text, isError = false) {
+        syncLabel.textContent = text;
+        syncLabel.classList.toggle("error", isError);
+      }
+
+      function getFilteredImages() {
+        return images
+          .map((file, index) => ({ file, index }))
+          .filter((item) => {
+            const summary = summaries[item.file] || {};
+            const matchesFilter =
+              filter === "all" || (voterId ? marks[item.file] === filter : Number(summary[filter] || 0) > 0);
+            const note = notes[item.file] || "";
+            const matchesSearch =
+              item.file.toLowerCase().includes(searchText) || note.toLowerCase().includes(searchText);
+            return matchesFilter && matchesSearch;
+          });
+      }
+
+      function updateSummary() {
+        const totals = Object.values(summaries).reduce(
+          (sum, item) => {
+            sum.keep += Number(item.keep || 0);
+            sum.hold += Number(item.hold || 0);
+            sum.out += Number(item.out || 0);
+            return sum;
+          },
+          { keep: 0, hold: 0, out: 0 },
+        );
+        countLabel.textContent = `共 ${images.length} 张`;
+        resultLabel.textContent = `入选 ${totals.keep} / 待定 ${totals.hold} / 排除 ${totals.out}`;
+        voterLabel.textContent = currentVoter ? `当前：${currentVoter.name}` : "主持视图";
+      }
+
+      function setMark(file, value) {
+        if (!voterId) {
+          setSyncLabel("主持视图不能投票，请复制外发端链接", true);
+          return;
+        }
+        if (marks[file] === value) {
+          delete marks[file];
+        } else {
+          marks[file] = value;
+        }
+        render();
+        syncVote(file);
+      }
+
+      function setNote(file, value) {
+        if (!voterId) return;
+        const note = value.slice(0, 60);
+        if (note) {
+          notes[file] = note;
+        } else {
+          delete notes[file];
+        }
+        window.clearTimeout(noteTimers.get(file));
+        noteTimers.set(
+          file,
+          window.setTimeout(() => {
+            syncVote(file);
+            noteTimers.delete(file);
+          }, 450),
+        );
+      }
+
+      function activeNoteFile() {
+        const active = document.activeElement;
+        return active?.classList?.contains("note-input") ? active.dataset.file || "" : "";
+      }
+
+      function applyRemoteState(payload, shouldRender = true) {
+        const focusedFile = activeNoteFile();
+        const focusedValue = focusedFile ? document.activeElement.value : "";
+        const nextMarks = {};
+        const nextNotes = {};
+        summaries = payload.summaries || {};
+        allVotes = payload.votes || {};
+        voters = Array.isArray(payload.voters) ? payload.voters : [];
+        currentVoter = payload.voter || null;
+        recentEvents = Array.isArray(payload.recentEvents) ? payload.recentEvents : [];
+        Object.entries(payload.currentVotes || {}).forEach(([file, item]) => {
+          if (item.mark) nextMarks[file] = item.mark;
+          if (item.note) nextNotes[file] = item.note;
+        });
+        if (focusedFile) nextNotes[focusedFile] = focusedValue;
+        marks = nextMarks;
+        notes = nextNotes;
+        if (shouldRender && !focusedFile) {
+          render();
+        } else {
+          updateSummary();
+        }
+        renderLogs();
+      }
+
+      async function loadRemoteState({ silent = false } = {}) {
+        try {
+          if (!silent) setSyncLabel("同步中");
+          const response = await fetch(stateUrl(), { cache: "no-store" });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const payload = await response.json();
+          if (!payload.ok) throw new Error(payload.error || "Sync failed");
+          applyRemoteState(payload, true);
+          setSyncLabel("已同步");
+        } catch {
+          setSyncLabel("同步失败", true);
+        }
+      }
+
+      async function createVoter() {
+        const fallbackName = `外发端${voters.length + 1}`;
+        const name = window.prompt("外发端名称", fallbackName);
+        if (name === null) return;
+        try {
+          setSyncLabel("生成链接中");
+          const response = await fetch(voterUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ project: projectId, name }),
+          });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const payload = await response.json();
+          if (!payload.ok || !payload.link) throw new Error(payload.error || "Create voter failed");
+          await copyText(payload.link);
+          await loadRemoteState({ silent: true });
+          setSyncLabel("外发端链接已生成");
+        } catch {
+          setSyncLabel("生成失败", true);
+        }
+      }
+
+      async function copyCurrentLink() {
+        if (!voterId) {
+          setSyncLabel("请先新增外发端", true);
+          return;
+        }
+        await copyText(window.location.href);
+        setSyncLabel("本端链接已生成");
+      }
+
+      async function copyText(text) {
+        if (navigator.clipboard?.writeText) {
+          try {
+            await navigator.clipboard.writeText(text);
+            return;
+          } catch {
+            // Fall through to a selectable prompt on non-secure HTTP pages.
+          }
+        }
+        window.prompt("复制链接", text);
+      }
+
+      async function syncVote(file) {
+        if (!voterId) return;
+        try {
+          setSyncLabel("保存中");
+          const response = await fetch(voteUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              project: projectId,
+              voter: voterId,
+              file,
+              mark: marks[file] || "",
+              note: notes[file] || "",
+            }),
+          });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const payload = await response.json();
+          if (!payload.ok) throw new Error(payload.error || "Save failed");
+          applyRemoteState(payload, true);
+          setSyncLabel("已同步");
+        } catch {
+          setSyncLabel("同步失败", true);
+        }
+      }
+
+      async function loadLogs() {
+        const response = await fetch(logsUrl, { cache: "no-store" });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const payload = await response.json();
+        if (!payload.ok) throw new Error(payload.error || "Logs failed");
+        allEvents = (payload.events || []).slice().reverse();
+        renderLogs();
+      }
+
+      async function openLogs() {
+        logPanel.classList.add("open");
+        try {
+          await loadLogs();
+        } catch {
+          renderLogs();
+        }
+      }
+
+      function render() {
+        updateSummary();
+        const items = getFilteredImages();
+        const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+        page = Math.min(page, totalPages - 1);
+        const pageItems = items.slice(page * pageSize, page * pageSize + pageSize);
+
+        stage.innerHTML = "";
+        stage.classList.toggle("is-empty", pageItems.length === 0);
+        empty.classList.toggle("is-visible", pageItems.length === 0);
+        pageLabel.textContent = `${page + 1} / ${totalPages}`;
+        prevBtn.disabled = page === 0;
+        nextBtn.disabled = page >= totalPages - 1;
+
+        pageItems.forEach((item) => {
+          const mark = marks[item.file] || "";
+          const summary = summaries[item.file] || {};
+          const tile = document.createElement("article");
+          tile.className = `tile ${mark}`;
+
+          const imageWrap = document.createElement("div");
+          imageWrap.className = "image-wrap";
+
+          const img = document.createElement("img");
+          img.src = encodeURI(`images/${item.file}`);
+          img.alt = item.file;
+          img.loading = "eager";
+          img.decoding = "async";
+          imageWrap.append(img);
+
+          const number = document.createElement("div");
+          number.className = "number";
+          number.textContent = String(item.index + 1).padStart(2, "0");
+
+          const status = document.createElement("div");
+          status.className = "status";
+          status.textContent = labels[mark] || "";
+
+          const caption = document.createElement("footer");
+          caption.className = "caption";
+
+          const filename = document.createElement("div");
+          filename.className = "filename";
+          filename.title = item.file;
+          filename.textContent = item.file;
+
+          const actions = document.createElement("div");
+          actions.className = "actions";
+
+          [
+            ["keep", "✓", "入选"],
+            ["hold", "?", "待定"],
+            ["out", "×", "排除"],
+          ].forEach(([value, text, title]) => {
+            const button = document.createElement("button");
+            button.className = `mark ${value}${mark === value ? " active" : ""}`;
+            button.type = "button";
+            button.title = title;
+            button.textContent = text;
+            button.disabled = !voterId;
+            button.addEventListener("click", (event) => {
+              event.stopPropagation();
+              setMark(item.file, value);
+            });
+            actions.append(button);
+          });
+
+          const voteSummary = document.createElement("div");
+          voteSummary.className = "vote-summary";
+          voteSummary.innerHTML = `<span>入选 ${summary.keep || 0}</span><span>待定 ${summary.hold || 0}</span><span>排除 ${summary.out || 0}</span>`;
+
+          const noteInput = document.createElement("input");
+          noteInput.className = "note-input";
+          noteInput.type = "text";
+          noteInput.maxLength = 60;
+          noteInput.placeholder = voterId ? "一句话留言" : "主持视图不记录留言";
+          noteInput.dataset.file = item.file;
+          noteInput.value = notes[item.file] || "";
+          noteInput.disabled = !voterId;
+          noteInput.addEventListener("click", (event) => event.stopPropagation());
+          noteInput.addEventListener("dblclick", (event) => event.stopPropagation());
+          noteInput.addEventListener("input", () => setNote(item.file, noteInput.value));
+          noteInput.addEventListener("blur", () => syncVote(item.file));
+
+          tile.addEventListener("dblclick", () => window.open(encodeURI(`images/${item.file}`), "_blank"));
+          caption.append(filename, actions, voteSummary, noteInput);
+          tile.append(imageWrap, number, status, caption);
+          stage.append(tile);
+        });
+      }
+
+      function exportCsv() {
+        const rows = [["序号", "文件名", "外发端", "筛选结果", "留言", "更新时间"]];
+        images.forEach((file, index) => {
+          Object.entries(allVotes[file] || {}).forEach(([rowVoterId, vote]) => {
+            rows.push([
+              String(index + 1).padStart(2, "0"),
+              file,
+              voterName(rowVoterId),
+              labels[vote.mark] || "",
+              vote.note || "",
+              vote.updatedAt || "",
+            ]);
+          });
+        });
+        downloadCsv(rows, "产品委员会包装投票明细.csv");
+      }
+
+      function exportLogs() {
+        const events = allEvents.length ? allEvents.slice().reverse() : recentEvents.slice().reverse();
+        const rows = [["时间", "外发端", "图片序号", "文件名", "操作", "筛选结果", "留言", "原筛选结果", "原留言"]];
+        events.forEach((event) => {
+          rows.push([
+            event.at || "",
+            event.voterName || voterName(event.voterId),
+            imageNumber(event.file),
+            event.file || "",
+            actionLabels[event.action] || event.action || "",
+            labels[event.mark] || "",
+            event.note || "",
+            labels[event.previousMark] || "",
+            event.previousNote || "",
+          ]);
+        });
+        downloadCsv(rows, "产品委员会包装投票日志.csv");
+      }
+
+      function downloadCsv(rows, filename) {
+        const csv = rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(",")).join("\n");
+        const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = filename;
+        link.click();
+        URL.revokeObjectURL(link.href);
+      }
+
+      function renderLogs() {
+        const events = allEvents.length ? allEvents : recentEvents;
+        if (!events.length) {
+          logList.innerHTML = '<div class="log-row"><span class="muted">暂无日志</span></div>';
+          return;
+        }
+        logList.innerHTML = "";
+        events.forEach((event) => {
+          const row = document.createElement("div");
+          row.className = "log-row";
+          row.innerHTML = `
+            <span class="muted">${formatTime(event.at)}</span>
+            <strong>${event.voterName || voterName(event.voterId)}</strong>
+            <span>${imageNumber(event.file)} ${event.file || ""}<br><span class="muted">${actionLabels[event.action] || event.action || ""} ${labels[event.mark] || ""} ${event.note || ""}</span></span>
+          `;
+          logList.append(row);
+        });
+      }
+
+      function voterName(rowVoterId) {
+        return voters.find((voter) => voter.id === rowVoterId)?.name || rowVoterId || "";
+      }
+
+      function imageNumber(file) {
+        const index = images.indexOf(file);
+        return index >= 0 ? String(index + 1).padStart(2, "0") : "";
+      }
+
+      function formatTime(value) {
+        if (!value) return "";
+        return new Date(value).toLocaleString("zh-CN", { hour12: false });
+      }
+
+      document.querySelectorAll("[data-filter]").forEach((button) => {
+        button.addEventListener("click", () => {
+          document.querySelectorAll("[data-filter]").forEach((item) => item.classList.remove("active"));
+          button.classList.add("active");
+          filter = button.dataset.filter;
+          page = 0;
+          render();
+        });
+      });
+
+      searchInput.addEventListener("input", () => {
+        searchText = searchInput.value.trim().toLowerCase();
+        page = 0;
+        render();
+      });
+
+      prevBtn.addEventListener("click", () => {
+        page = Math.max(0, page - 1);
+        render();
+      });
+
+      nextBtn.addEventListener("click", () => {
+        page += 1;
+        render();
+      });
+
+      createVoterBtn.addEventListener("click", createVoter);
+      copyLinkBtn.addEventListener("click", copyCurrentLink);
+      logBtn.addEventListener("click", openLogs);
+      closeLogBtn.addEventListener("click", () => logPanel.classList.remove("open"));
+      exportBtn.addEventListener("click", exportCsv);
+      exportLogsBtn.addEventListener("click", async () => {
+        try {
+          await loadLogs();
+        } catch {
+          // Keep the latest visible logs if the full log request fails.
+        }
+        exportLogs();
+      });
+
+      fullBtn.addEventListener("click", () => {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen();
+        } else {
+          document.exitFullscreen();
+        }
+      });
+
+      window.addEventListener("keydown", (event) => {
+        if (event.key === "ArrowLeft") prevBtn.click();
+        if (event.key === "ArrowRight" || event.key === " ") nextBtn.click();
+        if (event.key.toLowerCase() === "f") fullBtn.click();
+      });
+
+      render();
+      loadRemoteState();
+      window.setInterval(() => loadRemoteState({ silent: true }), syncIntervalMs);
+    </script>
+  </body>
+</html>
