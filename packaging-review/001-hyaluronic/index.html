@@ -596,7 +596,7 @@
             <span id="countLabel">共 0 张</span>
             <span>每屏 10 张</span>
             <span id="resultLabel">入选 0 / 待定 0 / 排除 0</span>
-            <span class="voter-pill" id="voterLabel">主持视图</span>
+            <span class="voter-pill" id="voterLabel">主页面</span>
             <span class="sync-state" id="syncLabel">连接服务器</span>
           </div>
         </div>
@@ -752,6 +752,10 @@
         return !voterId;
       }
 
+      function canVote() {
+        return Boolean(voterId && currentVoter);
+      }
+
       function syncHostControls() {
         addImageBtn.classList.toggle("is-hidden", !canManageImages());
       }
@@ -771,7 +775,7 @@
           .filter((item) => {
             const summary = summaries[item.file] || {};
             const matchesFilter =
-              filter === "all" || (voterId ? marks[item.file] === filter : Number(summary[filter] || 0) > 0);
+              filter === "all" || (canVote() ? marks[item.file] === filter : Number(summary[filter] || 0) > 0);
             const note = notes[item.file] || "";
             const matchesSearch =
               item.file.toLowerCase().includes(searchText) || note.toLowerCase().includes(searchText);
@@ -791,12 +795,12 @@
         );
         countLabel.textContent = `共 ${images.length} 张`;
         resultLabel.textContent = `入选 ${totals.keep} / 待定 ${totals.hold} / 排除 ${totals.out}`;
-        voterLabel.textContent = currentVoter ? `当前：${currentVoter.name}` : "主持视图";
+        voterLabel.textContent = currentVoter ? `当前：${currentVoter.name}` : voterId ? "分发链接无效" : "主页面";
       }
 
       function setMark(file, value) {
-        if (!voterId) {
-          setSyncLabel("主持视图不能投票，请复制外发端链接", true);
+        if (!canVote()) {
+          setSyncLabel(voterId ? "分发链接无效，无法投票" : "主页面无法投票，请使用分发链接", true);
           return;
         }
         if (marks[file] === value) {
@@ -823,7 +827,7 @@
       }
 
       function setNote(file, value) {
-        if (!voterId) return;
+        if (!canVote()) return;
         const note = value.slice(0, 60);
         if (note) {
           notes[file] = note;
@@ -1035,7 +1039,7 @@
       }
 
       async function syncVote(file) {
-        if (!voterId) return;
+        if (!canVote()) return;
         try {
           setSyncLabel("保存中");
           const response = await fetch(voteUrl, {
@@ -1092,6 +1096,7 @@
         nextBtn.disabled = page >= totalPages - 1;
 
         pageItems.forEach((item) => {
+          const votingEnabled = canVote();
           const mark = marks[item.file] || "";
           const summary = summaries[item.file] || {};
           const tile = document.createElement("article");
@@ -1137,7 +1142,7 @@
             button.title = title;
             button.setAttribute("aria-label", title);
             button.textContent = isMobileViewport() ? title : text;
-            button.disabled = !voterId;
+            button.disabled = !votingEnabled;
             button.addEventListener("pointerup", (event) => handleMarkPointer(event, item.file, value));
             button.addEventListener("click", (event) => handleMarkClick(event, item.file, value));
             actions.append(button);
@@ -1174,10 +1179,10 @@
           noteInput.className = "note-input";
           noteInput.type = "text";
           noteInput.maxLength = 60;
-          noteInput.placeholder = voterId ? "一句话留言" : "主持视图不记录留言";
+          noteInput.placeholder = votingEnabled ? "一句话留言" : voterId ? "分发链接无效，无法留言" : "主页面不记录留言";
           noteInput.dataset.file = item.file;
           noteInput.value = notes[item.file] || "";
-          noteInput.disabled = !voterId;
+          noteInput.disabled = !votingEnabled;
           noteInput.addEventListener("click", (event) => event.stopPropagation());
           noteInput.addEventListener("dblclick", (event) => event.stopPropagation());
           noteInput.addEventListener("input", () => setNote(item.file, noteInput.value));
