@@ -246,11 +246,19 @@
 
       .stage {
         display: grid;
-        grid-template-columns: repeat(5, minmax(0, 1fr));
-        grid-template-rows: repeat(2, minmax(0, 1fr));
         gap: 10px;
         min-height: 0;
         padding: 12px;
+      }
+
+      .stage.layout-2x5 {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        grid-template-rows: repeat(2, minmax(0, 1fr));
+      }
+
+      .stage.layout-1x2 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-rows: minmax(0, 1fr);
       }
 
       .tile {
@@ -758,10 +766,18 @@
         }
 
         .stage {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          grid-template-rows: repeat(5, minmax(190px, 1fr));
           height: auto;
           min-height: calc(100dvh - 130px);
+        }
+
+        .stage.layout-2x5 {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          grid-template-rows: repeat(5, minmax(190px, 1fr));
+        }
+
+        .stage.layout-1x2 {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          grid-template-rows: minmax(260px, 1fr);
         }
       }
 
@@ -795,7 +811,8 @@
           justify-content: space-between;
         }
 
-        .stage {
+        .stage.layout-2x5,
+        .stage.layout-1x2 {
           grid-template-columns: 1fr;
           grid-template-rows: none;
         }
@@ -882,7 +899,7 @@
           <h1>产品委员会包装筛选展示</h1>
           <div class="meta">
             <span id="countLabel">共 0 张</span>
-            <span>每屏 10 张</span>
+            <span id="pageSizeLabel">每屏 10 张</span>
             <span id="resultLabel">入选 0 / 待定 0 / 排除 0</span>
             <span class="voter-pill" id="voterLabel">主页面</span>
             <span id="usageLabel">使用次数：主页面设置</span>
@@ -899,6 +916,10 @@
             <button class="button text" type="button" data-filter="keep">入选</button>
             <button class="button text" type="button" data-filter="hold">待定</button>
             <button class="button text" type="button" data-filter="out">排除</button>
+          </div>
+          <div class="segmented" role="tablist" aria-label="页面布局">
+            <button class="button text" type="button" data-layout="1x2">1×2</button>
+            <button class="button text active" type="button" data-layout="2x5">2×5</button>
           </div>
           <div class="pager">
             <button class="button icon" type="button" id="prevBtn" title="上一屏">‹</button>
@@ -1000,7 +1021,12 @@
         "177909920652027986006531_221717596802_file_00000000c2207208a4f256417eb85f4b.png",
       ];
 
-      const pageSize = 10;
+      const layoutModes = {
+        "1x2": { label: "1×2", pageSize: 2 },
+        "2x5": { label: "2×5", pageSize: 10 },
+      };
+      const layoutStorageKey = "packaging-review-layout";
+      let layoutMode = layoutModes[window.localStorage.getItem(layoutStorageKey)] ? window.localStorage.getItem(layoutStorageKey) : "2x5";
       const defaultProjectId = "001-hyaluronic";
       const urlParams = new URLSearchParams(window.location.search);
       let projectId = projectFromPath();
@@ -1068,6 +1094,7 @@
       const submitLabel = document.querySelector("#submitLabel");
       const syncLabel = document.querySelector("#syncLabel");
       const pageLabel = document.querySelector("#pageLabel");
+      const pageSizeLabel = document.querySelector("#pageSizeLabel");
       const searchInput = document.querySelector("#searchInput");
       const decisionPanel = document.querySelector("#decisionPanel");
       const projectSearchInput = document.querySelector("#projectSearchInput");
@@ -1107,6 +1134,28 @@
       function normalizeProductTag(value) {
         const tag = String(value || "").trim().replace(/\s+/g, " ").slice(0, 40);
         return tag === "全部产品" ? "" : tag;
+      }
+
+      function currentLayout() {
+        return layoutModes[layoutMode] || layoutModes["2x5"];
+      }
+
+      function syncLayoutControls() {
+        stage.classList.toggle("layout-1x2", layoutMode === "1x2");
+        stage.classList.toggle("layout-2x5", layoutMode === "2x5");
+        document.querySelectorAll("[data-layout]").forEach((button) => {
+          button.classList.toggle("active", button.dataset.layout === layoutMode);
+        });
+        pageSizeLabel.textContent = `每屏 ${currentLayout().pageSize} 张`;
+      }
+
+      function setLayoutMode(nextLayoutMode) {
+        if (!layoutModes[nextLayoutMode]) return;
+        layoutMode = nextLayoutMode;
+        window.localStorage.setItem(layoutStorageKey, layoutMode);
+        page = 0;
+        syncLayoutControls();
+        render();
       }
 
       function logsUrl() {
@@ -1853,7 +1902,9 @@
       }
 
       function render() {
+        syncLayoutControls();
         updateSummary();
+        const pageSize = currentLayout().pageSize;
         const items = getFilteredImages();
         const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
         page = Math.min(page, totalPages - 1);
@@ -2300,6 +2351,10 @@
           page = 0;
           render();
         });
+      });
+
+      document.querySelectorAll("[data-layout]").forEach((button) => {
+        button.addEventListener("click", () => setLayoutMode(button.dataset.layout));
       });
 
       searchInput.addEventListener("input", () => {
