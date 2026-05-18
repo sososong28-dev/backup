@@ -52,6 +52,11 @@
         font: inherit;
       }
 
+      button {
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+      }
+
       .file-input {
         display: none;
       }
@@ -392,6 +397,7 @@
         color: #4a4842;
         background: #ffffff;
         cursor: pointer;
+        user-select: none;
       }
 
       .mark:hover {
@@ -544,6 +550,40 @@
         .tile {
           min-height: 320px;
         }
+
+        .caption {
+          grid-template-columns: 1fr;
+          gap: 7px;
+          min-height: 150px;
+          padding: 9px;
+        }
+
+        .actions {
+          grid-column: 1 / -1;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 6px;
+          width: 100%;
+        }
+
+        .mark {
+          width: 100%;
+          min-width: 0;
+          height: 44px;
+          min-height: 44px;
+          border-radius: 7px;
+          font-size: 15px;
+          font-weight: 800;
+        }
+
+        .note-input {
+          height: 40px;
+          font-size: 14px;
+        }
+
+        .vote-summary span {
+          height: 26px;
+          font-size: 13px;
+        }
       }
     </style>
   </head>
@@ -672,6 +712,7 @@
       let noteTimers = new Map();
       let imageCacheBust = "";
       let pendingReplaceFile = "";
+      let lastTouchVoteAt = 0;
 
       const stage = document.querySelector("#stage");
       const empty = document.querySelector("#empty");
@@ -765,6 +806,20 @@
         }
         render();
         syncVote(file);
+      }
+
+      function handleMarkPointer(event, file, value) {
+        if (event.pointerType === "mouse") return;
+        event.preventDefault();
+        event.stopPropagation();
+        lastTouchVoteAt = Date.now();
+        setMark(file, value);
+      }
+
+      function handleMarkClick(event, file, value) {
+        event.stopPropagation();
+        if (Date.now() - lastTouchVoteAt < 520) return;
+        setMark(file, value);
       }
 
       function setNote(file, value) {
@@ -1080,12 +1135,11 @@
             button.className = `mark ${value}${mark === value ? " active" : ""}`;
             button.type = "button";
             button.title = title;
-            button.textContent = text;
+            button.setAttribute("aria-label", title);
+            button.textContent = isMobileViewport() ? title : text;
             button.disabled = !voterId;
-            button.addEventListener("click", (event) => {
-              event.stopPropagation();
-              setMark(item.file, value);
-            });
+            button.addEventListener("pointerup", (event) => handleMarkPointer(event, item.file, value));
+            button.addEventListener("click", (event) => handleMarkClick(event, item.file, value));
             actions.append(button);
           });
 
@@ -1220,6 +1274,10 @@
       function formatTime(value) {
         if (!value) return "";
         return new Date(value).toLocaleString("zh-CN", { hour12: false });
+      }
+
+      function isMobileViewport() {
+        return window.matchMedia("(max-width: 620px)").matches;
       }
 
       document.querySelectorAll("[data-filter]").forEach((button) => {
