@@ -1005,12 +1005,16 @@
         return !voterId;
       }
 
+      function hasValidVoter() {
+        return Boolean(voterId && currentVoter);
+      }
+
       function canVote() {
-        return Boolean(voterId && currentVoter && hasUsageRemaining(currentVoter));
+        return Boolean(hasValidVoter() && hasUsageRemaining(currentVoter));
       }
 
       function canSubmitConfirm() {
-        return Boolean(voterId && currentVoter);
+        return hasValidVoter();
       }
 
       function hasUsageRemaining(voter) {
@@ -1067,7 +1071,7 @@
           .filter((item) => {
             const summary = summaries[item.file] || {};
             const matchesFilter =
-              filter === "all" || (canVote() ? marks[item.file] === filter : Number(summary[filter] || 0) > 0);
+              filter === "all" || (hasValidVoter() ? marks[item.file] === filter : Number(summary[filter] || 0) > 0);
             const note = notes[item.file] || "";
             const description = descriptions[item.file] || "";
             const matchesSearch =
@@ -1100,13 +1104,15 @@
       }
 
       function setMark(file, value) {
-        if (!canVote()) {
-          const message = currentVoter
-            ? "使用次数已用完"
-            : voterId
-              ? "分发链接无效，无法投票"
-              : "主页面无法投票，请使用分发链接";
+        if (!hasValidVoter()) {
+          const message = voterId ? "分发链接无效，无法投票" : "主页面无法投票，请使用分发链接";
           setSyncLabel(message, true);
+          return;
+        }
+        if (!hasUsageRemaining(currentVoter)) {
+          const message = "使用次数已用完，请联系主持人调整使用次数";
+          setSyncLabel(message, true);
+          window.alert(message);
           return;
         }
         marks[file] = value;
@@ -1575,6 +1581,7 @@
 
         pageItems.forEach((item) => {
           const votingEnabled = canVote();
+          const canClickVote = hasValidVoter();
           const mark = marks[item.file] || "";
           const summary = summaries[item.file] || {};
           const tile = document.createElement("article");
@@ -1620,7 +1627,7 @@
             button.title = title;
             button.setAttribute("aria-label", title);
             button.textContent = isMobileViewport() ? title : text;
-            button.disabled = !votingEnabled;
+            button.disabled = !canClickVote;
             button.addEventListener("pointerup", (event) => handleMarkPointer(event, item.file, value));
             button.addEventListener("click", (event) => handleMarkClick(event, item.file, value));
             actions.append(button);
