@@ -687,6 +687,7 @@
       const actionLabels = {
         "create-voter": "新增外发端",
         vote: "投票",
+        "vote-click": "再次投票",
         "change-vote": "改票",
         cancel: "取消",
         note: "留言",
@@ -803,13 +804,9 @@
           setSyncLabel(voterId ? "分发链接无效，无法投票" : "主页面无法投票，请使用分发链接", true);
           return;
         }
-        if (marks[file] === value) {
-          delete marks[file];
-        } else {
-          marks[file] = value;
-        }
+        marks[file] = value;
         render();
-        syncVote(file);
+        syncVote(file, { recordClick: true });
       }
 
       function handleMarkPointer(event, file, value) {
@@ -1038,7 +1035,7 @@
         });
       }
 
-      async function syncVote(file) {
+      async function syncVote(file, options = {}) {
         if (!canVote()) return;
         try {
           setSyncLabel("保存中");
@@ -1051,6 +1048,7 @@
               file,
               mark: marks[file] || "",
               note: notes[file] || "",
+              recordClick: options.recordClick === true,
             }),
           });
           if (!response.ok) throw new Error(`HTTP ${response.status}`);

@@ -264,6 +264,7 @@ async function handlePackagingReviewVote(req, res) {
 
   const mark = normalizeReviewMark(body.mark);
   const note = compactText(body.note).slice(0, 60);
+  const recordClick = body.recordClick === true;
   const state = readPackagingReviewState();
   const projectState = getReviewProjectState(state, project);
   const voter = projectState.voters[voterId];
@@ -276,7 +277,7 @@ async function handlePackagingReviewVote(req, res) {
   const previous = projectState.votes[file][voterId] || {};
   const previousMark = previous.mark || "";
   const previousNote = previous.note || "";
-  if (previousMark === mark && previousNote === note) {
+  if (previousMark === mark && previousNote === note && !recordClick) {
     sendJson(res, 200, buildReviewPayload(project, state, { voterId }));
     return;
   }
@@ -304,7 +305,7 @@ async function handlePackagingReviewVote(req, res) {
   voter.updatedAt = now;
   projectState.updatedAt = now;
   appendReviewEvent(projectState, {
-    action: getReviewEventAction(previousMark, previousNote, mark, note),
+    action: getReviewEventAction(previousMark, previousNote, mark, note, recordClick),
     file,
     voterId,
     voterName: voter.name,
@@ -741,10 +742,11 @@ function appendReviewEvent(projectState, event) {
   }
 }
 
-function getReviewEventAction(previousMark, previousNote, mark, note) {
+function getReviewEventAction(previousMark, previousNote, mark, note, recordClick = false) {
   if (previousMark && !mark && previousNote === note) return "cancel";
   if (!previousMark && mark) return "vote";
   if (previousMark && previousMark !== mark) return "change-vote";
+  if (recordClick && previousMark === mark && mark) return "vote-click";
   if (previousNote !== note) return "note";
   return "update";
 }
