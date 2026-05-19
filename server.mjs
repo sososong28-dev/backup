@@ -358,13 +358,17 @@ async function handlePackagingReviewVoter(req, res) {
   const voterId = createReviewId();
   const name = compactText(body.name).slice(0, 40) || `外发端${index}`;
   const productTag = normalizeProductTag(body.productTag || body.product);
+  const distributionStage =
+    normalizeDistributionStage(body.distributionStage || body.stage) || nextReviewDistributionStageName(projectState);
   if (productTag) addReviewProductTag(projectState, productTag);
+  addReviewDistributionStage(projectState, distributionStage);
   const now = new Date().toISOString();
 
   projectState.voters[voterId] = {
     id: voterId,
     name,
     productTag,
+    distributionStage,
     usageLimit: normalizeUsageLimit(body.usageLimit),
     voteClickCount: 0,
     submitCount: 0,
@@ -378,6 +382,7 @@ async function handlePackagingReviewVoter(req, res) {
     voterId,
     voterName: name,
     productTag,
+    distributionStage,
   });
   writePackagingReviewState(state);
 
@@ -416,6 +421,7 @@ async function handlePackagingReviewVoterSettings(req, res) {
       voterId,
       voterName: voter.name,
       productTag: voter.productTag,
+      distributionStage: voter.distributionStage,
       note: removedVotes ? `删除分发端，清理 ${removedVotes} 条投票` : "删除分发端",
     });
     writePackagingReviewState(state);
@@ -428,24 +434,31 @@ async function handlePackagingReviewVoterSettings(req, res) {
   }
 
   const usageLimit = normalizeUsageLimit(body.usageLimit);
+  const distributionStage =
+    normalizeDistributionStage(body.distributionStage || body.stage) || normalizeDistributionStage(voter.distributionStage);
   const previousUsageLimit = normalizeUsageLimit(voter.usageLimit);
-  if (previousUsageLimit === usageLimit) {
+  const previousDistributionStage = normalizeDistributionStage(voter.distributionStage);
+  if (previousUsageLimit === usageLimit && previousDistributionStage === distributionStage) {
     sendJson(res, 200, buildReviewPayload(project, state, { productTag }));
     return;
   }
 
   const now = new Date().toISOString();
   voter.usageLimit = usageLimit;
+  voter.distributionStage = distributionStage;
+  addReviewDistributionStage(projectState, distributionStage);
   voter.updatedAt = now;
   projectState.updatedAt = now;
   appendReviewEvent(projectState, {
-    action: "update-voter-usage",
+    action: previousDistributionStage === distributionStage ? "update-voter-usage" : "update-voter-settings",
     voterId,
     voterName: voter.name,
+    distributionStage,
+    previousDistributionStage,
     usageLimit,
     previousUsageLimit,
-    note: formatUsageLimitText(usageLimit),
-    previousNote: formatUsageLimitText(previousUsageLimit),
+    note: `${distributionStage} / ${formatUsageLimitText(usageLimit)}`,
+    previousNote: `${previousDistributionStage} / ${formatUsageLimitText(previousUsageLimit)}`,
   });
   writePackagingReviewState(state);
   sendJson(res, 200, buildReviewPayload(project, state, { productTag }));
@@ -518,6 +531,7 @@ async function handlePackagingReviewVote(req, res) {
     file,
     voterId,
     voterName: voter.name,
+    distributionStage: voter.distributionStage,
     mark,
     note,
     previousMark,
@@ -553,6 +567,7 @@ async function handlePackagingReviewSubmit(req, res) {
     action: "submit-confirm",
     voterId,
     voterName: voter.name,
+    distributionStage: voter.distributionStage,
     note: "确认所有选项",
   });
   writePackagingReviewState(state);
@@ -801,6 +816,12 @@ function normalizeProductTag(value) {
   return tag;
 }
 
+function normalizeDistributionStage(value) {
+  const stage = compactText(value).slice(0, 40);
+  if (!stage || stage === "全部阶段") return "";
+  return stage;
+}
+
 function slugifyReviewProject(value) {
   const ascii = String(value || "")
     .trim()
@@ -915,6 +936,7 @@ function getReviewProjectState(state, project) {
       updatedAt: new Date().toISOString(),
       info: { id: project, name: defaultReviewProjectName(project) },
       productTags: defaultReviewProductTags(project),
+      distributionStages: [],
       imageProducts: {},
       voters: {},
       votes: {},
@@ -930,6 +952,7 @@ function getReviewProjectState(state, project) {
   projectState.info.name = compactText(projectState.info.name).slice(0, 60) || defaultReviewProjectName(project);
   if (!Array.isArray(projectState.productTags)) projectState.productTags = defaultReviewProductTags(project);
   projectState.productTags = [...new Set(projectState.productTags.map(normalizeProductTag).filter(Boolean))].slice(0, 80);
+  if (!Array.isArray(projectState.distributionStages)) projectState.distributionStages = [];
   if (!projectState.imageProducts || typeof projectState.imageProducts !== "object") projectState.imageProducts = {};
   if (!projectState.voters || typeof projectState.voters !== "object") projectState.voters = {};
   if (!projectState.votes || typeof projectState.votes !== "object") projectState.votes = {};
@@ -941,7 +964,10 @@ function getReviewProjectState(state, project) {
     voter.submitCount = Math.max(0, Math.floor(Number(voter.submitCount || 0)));
     voter.submittedAt = typeof voter.submittedAt === "string" ? voter.submittedAt : "";
     voter.productTag = normalizeProductTag(voter.productTag);
+    voter.distributionStage = normalizeDistributionStage(voter.distributionStage) || "第一次分发";
+    addReviewDistributionStage(projectState, voter.distributionStage);
   });
+  projectState.distributionStages = [...new Set(projectState.distributionStages.map(normalizeDistributionStage).filter(Boolean))].slice(0, 80);
 
   migrateDefaultReviewProductTags(project, projectState);
 
@@ -952,6 +978,7 @@ function getReviewProjectState(state, project) {
         id: voterId,
         name: "历史同步结果",
         productTag: "",
+        distributionStage: "第一次分发",
         usageLimit: null,
         voteClickCount: 0,
         submitCount: 0,
@@ -959,6 +986,7 @@ function getReviewProjectState(state, project) {
         createdAt: projectState.updatedAt || new Date().toISOString(),
         updatedAt: projectState.updatedAt || new Date().toISOString(),
       };
+      addReviewDistributionStage(projectState, projectState.voters[voterId].distributionStage);
     }
     Object.entries(projectState.items).forEach(([file, item]) => {
       if (!projectState.votes[file]) projectState.votes[file] = {};
@@ -998,6 +1026,24 @@ function addReviewProductTag(projectState, productTag) {
   if (!tag) return;
   if (!Array.isArray(projectState.productTags)) projectState.productTags = [];
   if (!projectState.productTags.includes(tag)) projectState.productTags.push(tag);
+}
+
+function addReviewDistributionStage(projectState, distributionStage) {
+  const stage = normalizeDistributionStage(distributionStage);
+  if (!stage) return;
+  if (!Array.isArray(projectState.distributionStages)) projectState.distributionStages = [];
+  if (!projectState.distributionStages.includes(stage)) projectState.distributionStages.push(stage);
+}
+
+function nextReviewDistributionStageName(projectState) {
+  const stages = projectState.distributionStages || [];
+  return formatDistributionStageName(stages.length + 1);
+}
+
+function formatDistributionStageName(index) {
+  const names = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十"];
+  const number = names[index - 1] || String(index);
+  return `第${number}次分发`;
 }
 
 function ensureReviewProjectsFromDisk(state) {
@@ -1056,6 +1102,7 @@ function buildReviewPayload(project, state, options = {}) {
     projectInfo: projectState.info,
     productTag,
     productTags: projectState.productTags || [],
+    distributionStages: projectState.distributionStages || [],
     imageProducts: projectState.imageProducts || {},
     projects: listReviewProjectInfos(state),
     images,

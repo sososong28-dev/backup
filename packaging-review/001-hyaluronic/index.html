@@ -127,7 +127,7 @@
       .decision-panel {
         grid-column: 1 / -1;
         display: grid;
-        grid-template-columns: repeat(2, minmax(260px, 1fr));
+        grid-template-columns: repeat(3, minmax(260px, 1fr));
         gap: 10px;
         padding-top: 10px;
         border-top: 1px solid rgba(0, 0, 0, 0.08);
@@ -715,7 +715,7 @@
 
       .voter-row {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) 120px auto auto auto;
+        grid-template-columns: minmax(0, 1fr) 132px 104px auto auto auto;
         gap: 8px;
         align-items: center;
         padding: 10px 0;
@@ -740,7 +740,8 @@
         font-size: 12px;
       }
 
-      .usage-input {
+      .usage-input,
+      .stage-input {
         width: 100%;
         height: 34px;
         border: 1px solid var(--line);
@@ -750,7 +751,8 @@
         background: #ffffff;
       }
 
-      .usage-input:focus {
+      .usage-input:focus,
+      .stage-input:focus {
         border-color: var(--accent);
         box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.16);
       }
@@ -1158,6 +1160,12 @@
             <select id="productSelect"></select>
             <button class="button text" type="button" id="newProductBtn">新增产品</button>
           </div>
+          <div class="decision-group">
+            <label for="stageSelect">阶段</label>
+            <input id="stageSearchInput" type="search" placeholder="搜索分发阶段" autocomplete="off" />
+            <select id="stageSelect"></select>
+            <button class="button text" type="button" id="newStageBtn">新增阶段</button>
+          </div>
         </div>
       </header>
       <section class="stage" id="stage" aria-label="包装图片展示"></section>
@@ -1257,9 +1265,11 @@
       const urlParams = new URLSearchParams(window.location.search);
       let projectId = projectFromPath();
       let currentProductTag = normalizeProductTag(urlParams.get("product") || "");
+      let currentDistributionStage = normalizeDistributionStage(urlParams.get("stage") || "");
       let projectInfo = { id: projectId, name: projectId };
       let projects = [];
       let productTags = [];
+      let distributionStages = [];
       let imageProducts = {};
       const voterUrl = "/api/packaging-review/voter";
       const voterSettingsUrl = "/api/packaging-review/voter-settings";
@@ -1281,6 +1291,7 @@
         note: "留言",
         update: "更新",
         "update-voter-usage": "修改使用次数",
+        "update-voter-settings": "修改分发设置",
         "delete-voter": "删除分发端",
         "submit-confirm": "提交确认",
         "project-create": "新增项目",
@@ -1309,6 +1320,7 @@
       let noteTimers = new Map();
       let descriptionTimers = new Map();
       let voterUsageTimers = new Map();
+      let voterStageTimers = new Map();
       let imageCacheBust = "";
       let pendingReplaceFile = "";
       let lastTouchVoteAt = 0;
@@ -1332,6 +1344,9 @@
       const productSearchInput = document.querySelector("#productSearchInput");
       const productSelect = document.querySelector("#productSelect");
       const newProductBtn = document.querySelector("#newProductBtn");
+      const stageSearchInput = document.querySelector("#stageSearchInput");
+      const stageSelect = document.querySelector("#stageSelect");
+      const newStageBtn = document.querySelector("#newStageBtn");
       const prevBtn = document.querySelector("#prevBtn");
       const nextBtn = document.querySelector("#nextBtn");
       const createVoterBtn = document.querySelector("#createVoterBtn");
@@ -1372,6 +1387,11 @@
         return tag === "全部产品" ? "" : tag;
       }
 
+      function normalizeDistributionStage(value) {
+        const stage = String(value || "").trim().replace(/\s+/g, " ").slice(0, 40);
+        return stage === "全部阶段" ? "" : stage;
+      }
+
       function currentLayout() {
         return layoutModes[layoutMode] || layoutModes["2x5"];
       }
@@ -1401,6 +1421,7 @@
       function stateUrl() {
         const params = new URLSearchParams({ project: projectId });
         if (currentProductTag) params.set("product", currentProductTag);
+        if (currentDistributionStage) params.set("stage", currentDistributionStage);
         if (voterId) params.set("voter", voterId);
         return `/api/packaging-review/state?${params.toString()}`;
       }
@@ -1463,6 +1484,51 @@
         return imageProducts[file] || "未分组";
       }
 
+      function voterStage(voter) {
+        return normalizeDistributionStage(voter?.distributionStage) || "第一次分发";
+      }
+
+      function selectedStageLabel() {
+        return currentDistributionStage || "全部阶段";
+      }
+
+      function stageMatchesVoter(voter, stage = currentDistributionStage) {
+        const target = normalizeDistributionStage(stage);
+        return !target || voterStage(voter) === target;
+      }
+
+      function sampleVoters() {
+        return voters.filter((voter) => stageMatchesVoter(voter));
+      }
+
+      function stageNamesFromVoters() {
+        return [...new Set(voters.map(voterStage).filter(Boolean))];
+      }
+
+      function nextDistributionStageName() {
+        const names = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十"];
+        const index = distributionStages.length + 1;
+        return `第${names[index - 1] || index}次分发`;
+      }
+
+      function buildStageSummaries(votes, stage = currentDistributionStage) {
+        const voterMap = new Map(voters.map((voter) => [voter.id, voter]));
+        const target = normalizeDistributionStage(stage);
+        return Object.entries(votes || {}).reduce((next, [file, byVoter]) => {
+          const summary = { keep: 0, hold: 0, out: 0, total: 0 };
+          Object.entries(byVoter || {}).forEach(([rowVoterId, vote]) => {
+            const voter = voterMap.get(rowVoterId);
+            if (target && !stageMatchesVoter(voter, target)) return;
+            const mark = vote.mark || "";
+            if (!summary[mark] && summary[mark] !== 0) return;
+            summary[mark] += 1;
+            summary.total += 1;
+          });
+          next[file] = summary;
+          return next;
+        }, {});
+      }
+
       function syncHostControls() {
         addImageBtn.classList.toggle("is-hidden", !canManageImages());
         voterSettingsBtn.classList.toggle("is-hidden", !canManageImages());
@@ -1508,7 +1574,7 @@
           },
           { keep: 0, hold: 0, out: 0 },
         );
-        countLabel.textContent = `${projectInfo.name || projectId} / ${currentProductTag || "全部产品"} / 共 ${images.length} 张`;
+        countLabel.textContent = `${projectInfo.name || projectId} / ${currentProductTag || "全部产品"} / ${selectedStageLabel()} / 共 ${images.length} 张`;
         resultLabel.textContent = `入选 ${totals.keep} / 待定 ${totals.hold} / 排除 ${totals.out}`;
         voterLabel.textContent = currentVoter ? `当前：${currentVoter.name}` : voterId ? "分发链接无效" : "主页面";
         usageLabel.textContent = currentVoter ? usageText(currentVoter) : "使用次数：主页面设置";
@@ -1596,9 +1662,10 @@
         return active?.classList?.contains("description-input") ? active.dataset.file || "" : "";
       }
 
-      function activeUsageVoterId() {
+      function activeVoterSettingsId() {
         const active = document.activeElement;
-        return active?.classList?.contains("usage-input") ? active.dataset.voter || "" : "";
+        const isSettingsInput = active?.classList?.contains("usage-input") || active?.classList?.contains("stage-input");
+        return isSettingsInput ? active.dataset.voter || "" : "";
       }
 
       function applyRemoteState(payload, shouldRender = true) {
@@ -1606,7 +1673,7 @@
         const focusedValue = focusedFile ? document.activeElement.value : "";
         const focusedDescriptionFile = activeDescriptionFile();
         const focusedDescriptionValue = focusedDescriptionFile ? document.activeElement.value : "";
-        const focusedUsageVoterId = activeUsageVoterId();
+        const focusedVoterSettingsId = activeVoterSettingsId();
         const nextMarks = {};
         const nextNotes = {};
         projectId = payload.project || projectId;
@@ -1614,13 +1681,16 @@
         currentProductTag = normalizeProductTag(payload.productTag || currentProductTag);
         projects = Array.isArray(payload.projects) ? payload.projects : projects;
         productTags = Array.isArray(payload.productTags) ? payload.productTags : [];
+        distributionStages = Array.isArray(payload.distributionStages) ? payload.distributionStages.map(normalizeDistributionStage).filter(Boolean) : distributionStages;
         imageProducts = payload.imageProducts || {};
         mergeRemoteImages(payload.images || []);
-        summaries = payload.summaries || {};
         allVotes = payload.votes || {};
         descriptions = payload.descriptions || {};
         voters = Array.isArray(payload.voters) ? payload.voters : [];
         currentVoter = payload.voter || null;
+        distributionStages = [...new Set([...distributionStages, ...stageNamesFromVoters(), currentDistributionStage].map(normalizeDistributionStage).filter(Boolean))];
+        if (currentVoter) currentDistributionStage = voterStage(currentVoter);
+        summaries = buildStageSummaries(allVotes, currentDistributionStage);
         recentEvents = Array.isArray(payload.recentEvents) ? payload.recentEvents : [];
         imageCacheBust = payload.updatedAt || imageCacheBust;
         Object.entries(payload.currentVotes || {}).forEach(([file, item]) => {
@@ -1640,7 +1710,7 @@
         }
         syncHostControls();
         renderDecisionControls();
-        if (!focusedUsageVoterId) renderVoterPanel();
+        if (!focusedVoterSettingsId) renderVoterPanel();
         renderLogs();
       }
 
@@ -1680,6 +1750,25 @@
           option.selected = tag === currentProductTag;
           productSelect.append(option);
         });
+
+        const stageQuery = stageSearchInput.value.trim().toLowerCase();
+        const visibleStages = distributionStages.filter((stage) => stage.toLowerCase().includes(stageQuery));
+        const stages = currentDistributionStage && !visibleStages.includes(currentDistributionStage)
+          ? [currentDistributionStage, ...visibleStages]
+          : visibleStages;
+        stageSelect.innerHTML = "";
+        const allStageOption = document.createElement("option");
+        allStageOption.value = "";
+        allStageOption.textContent = "全部阶段";
+        allStageOption.selected = !currentDistributionStage;
+        stageSelect.append(allStageOption);
+        stages.forEach((stage) => {
+          const option = document.createElement("option");
+          option.value = stage;
+          option.textContent = stage;
+          option.selected = stage === currentDistributionStage;
+          stageSelect.append(option);
+        });
       }
 
       async function loadRemoteState({ silent = false } = {}) {
@@ -1697,12 +1786,16 @@
       }
 
       async function createVoter() {
-        const fallbackName = `外发端${voters.length + 1}`;
+        const distributionStage = normalizeDistributionStage(window.prompt("分发阶段", currentDistributionStage || nextDistributionStageName()));
+        if (!distributionStage) return;
+        const fallbackName = `${distributionStage} 外发端${voters.length + 1}`;
         const name = window.prompt("外发端名称", fallbackName);
         if (name === null) return;
         const usageLimitText = window.prompt("使用次数，留空为不限", "");
         if (usageLimitText === null) return;
         try {
+          currentDistributionStage = distributionStage;
+          updateProductUrl();
           setSyncLabel("生成链接中");
           const response = await fetch(voterUrl, {
             method: "POST",
@@ -1711,6 +1804,7 @@
               project: projectId,
               name,
               productTag: currentProductTag,
+              distributionStage,
               usageLimit: parseUsageLimit(usageLimitText),
             }),
           });
@@ -1770,6 +1864,19 @@
         }
       }
 
+      function createDistributionStage() {
+        if (!canManageImages()) return;
+        const stage = normalizeDistributionStage(window.prompt("分发阶段名称", currentDistributionStage || nextDistributionStageName()));
+        if (!stage) return;
+        if (!distributionStages.includes(stage)) distributionStages.push(stage);
+        currentDistributionStage = stage;
+        page = 0;
+        updateProductUrl();
+        summaries = buildStageSummaries(allVotes, currentDistributionStage);
+        renderDecisionControls();
+        render();
+      }
+
       function slugProjectId(value) {
         return String(value || "")
           .trim()
@@ -1798,6 +1905,8 @@
         const url = new URL(window.location.href);
         if (currentProductTag) url.searchParams.set("product", currentProductTag);
         else url.searchParams.delete("product");
+        if (currentDistributionStage) url.searchParams.set("stage", currentDistributionStage);
+        else url.searchParams.delete("stage");
         window.history.replaceState({}, "", url.toString());
       }
 
@@ -1843,7 +1952,7 @@
         imagePreviewImg.alt = file;
         imagePreviewTitle.textContent = `${String(item.index + 1).padStart(2, "0")} ${file}`;
         imagePreviewDescription.textContent = descriptions[file] || "暂无说明";
-        imagePreviewProduct.textContent = `产品：${productNameForFile(file)}`;
+        imagePreviewProduct.textContent = `产品：${productNameForFile(file)} / 阶段：${selectedStageLabel()}`;
         imagePreviewVotes.textContent = `投票：入选 ${summary.keep || 0} / 待定 ${summary.hold || 0} / 排除 ${summary.out || 0}`;
         imageModal.classList.add("open");
         closeImageModalBtn.focus();
@@ -2101,8 +2210,18 @@
           const name = document.createElement("strong");
           name.textContent = voter.name || voter.id;
           const usage = document.createElement("span");
-          usage.textContent = `${usageText(voter).replace("使用次数：", "已用 ")} / 产品：${voter.productTag || "全部产品"}`;
+          usage.textContent = `${voterStage(voter)} / ${usageText(voter).replace("使用次数：", "已用 ")} / 产品：${voter.productTag || "全部产品"}`;
           main.append(name, usage);
+
+          const stageInput = document.createElement("input");
+          stageInput.className = "stage-input";
+          stageInput.type = "text";
+          stageInput.maxLength = 40;
+          stageInput.placeholder = "分发阶段";
+          stageInput.value = voterStage(voter);
+          stageInput.dataset.voter = voter.id;
+          stageInput.addEventListener("input", () => queueVoterStageSync(voter.id, input.value, stageInput.value));
+          stageInput.addEventListener("blur", () => flushVoterStageSync(voter.id, input.value, stageInput.value));
 
           const input = document.createElement("input");
           input.className = "usage-input";
@@ -2113,14 +2232,14 @@
           const limit = usageLimitValue(voter);
           input.value = limit === null ? "" : String(limit);
           input.dataset.voter = voter.id;
-          input.addEventListener("input", () => queueVoterUsageSync(voter.id, input.value));
-          input.addEventListener("blur", () => flushVoterUsageSync(voter.id, input.value));
+          input.addEventListener("input", () => queueVoterUsageSync(voter.id, input.value, stageInput.value));
+          input.addEventListener("blur", () => flushVoterUsageSync(voter.id, input.value, stageInput.value));
 
           const save = document.createElement("button");
           save.className = "button text";
           save.type = "button";
           save.textContent = "保存";
-          save.addEventListener("click", () => updateVoterUsage(voter.id, input.value));
+          save.addEventListener("click", () => updateVoterSettings(voter.id, input.value, stageInput.value));
 
           const copy = document.createElement("button");
           copy.className = "button text";
@@ -2137,7 +2256,7 @@
           remove.textContent = "删除";
           remove.addEventListener("click", () => deleteVoter(voter.id, voter.name));
 
-          row.append(main, input, save, copy, remove);
+          row.append(main, stageInput, input, save, copy, remove);
           voterList.append(row);
         });
       }
@@ -2147,15 +2266,19 @@
         url.search = "";
         url.searchParams.set("voter", rowVoterId);
         const tag = voters.find((voter) => voter.id === rowVoterId)?.productTag || "";
+        const stage = voterStage(voters.find((voter) => voter.id === rowVoterId));
         if (tag) url.searchParams.set("product", tag);
+        if (stage) url.searchParams.set("stage", stage);
         return url.toString();
       }
 
-      async function updateVoterUsage(rowVoterId, value) {
+      async function updateVoterSettings(rowVoterId, value, distributionStageValue) {
         try {
           window.clearTimeout(voterUsageTimers.get(rowVoterId));
           voterUsageTimers.delete(rowVoterId);
-          setSyncLabel("保存使用次数中");
+          window.clearTimeout(voterStageTimers.get(rowVoterId));
+          voterStageTimers.delete(rowVoterId);
+          setSyncLabel("保存分发设置中");
           const response = await fetch(voterSettingsUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -2163,32 +2286,49 @@
               project: projectId,
               productTag: currentProductTag,
               voter: rowVoterId,
+              distributionStage: normalizeDistributionStage(distributionStageValue) || "第一次分发",
               usageLimit: parseUsageLimit(value),
             }),
           });
           const payload = await response.json().catch(() => ({}));
           if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
           applyRemoteState(payload, true);
-          setSyncLabel("使用次数已保存");
+          setSyncLabel("分发设置已保存");
         } catch (error) {
           setSyncLabel(error.message || "保存失败", true);
         }
       }
 
-      function queueVoterUsageSync(rowVoterId, value) {
+      function queueVoterUsageSync(rowVoterId, value, distributionStageValue) {
         if (!canManageImages()) return;
         window.clearTimeout(voterUsageTimers.get(rowVoterId));
         voterUsageTimers.set(
           rowVoterId,
           window.setTimeout(() => {
-            updateVoterUsage(rowVoterId, value);
+            updateVoterSettings(rowVoterId, value, distributionStageValue);
           }, 650),
         );
       }
 
-      function flushVoterUsageSync(rowVoterId, value) {
+      function flushVoterUsageSync(rowVoterId, value, distributionStageValue) {
         if (!canManageImages() || !voterUsageTimers.has(rowVoterId)) return;
-        updateVoterUsage(rowVoterId, value);
+        updateVoterSettings(rowVoterId, value, distributionStageValue);
+      }
+
+      function queueVoterStageSync(rowVoterId, value, distributionStageValue) {
+        if (!canManageImages()) return;
+        window.clearTimeout(voterStageTimers.get(rowVoterId));
+        voterStageTimers.set(
+          rowVoterId,
+          window.setTimeout(() => {
+            updateVoterSettings(rowVoterId, value, distributionStageValue);
+          }, 650),
+        );
+      }
+
+      function flushVoterStageSync(rowVoterId, value, distributionStageValue) {
+        if (!canManageImages() || !voterStageTimers.has(rowVoterId)) return;
+        updateVoterSettings(rowVoterId, value, distributionStageValue);
       }
 
       async function deleteVoter(rowVoterId, name) {
@@ -2231,7 +2371,7 @@
         if (imagePreviewFile && imageModal.classList.contains("open")) {
           const summary = summaries[imagePreviewFile] || {};
           imagePreviewDescription.textContent = descriptions[imagePreviewFile] || "暂无说明";
-          imagePreviewProduct.textContent = `产品：${productNameForFile(imagePreviewFile)}`;
+          imagePreviewProduct.textContent = `产品：${productNameForFile(imagePreviewFile)} / 阶段：${selectedStageLabel()}`;
           imagePreviewVotes.textContent = `投票：入选 ${summary.keep || 0} / 待定 ${summary.hold || 0} / 排除 ${summary.out || 0}`;
         }
       }
@@ -2438,6 +2578,7 @@
             "序号",
             "文件名",
             "产品标签",
+            "统计阶段",
             "图片说明",
             "入选数",
             "待定数",
@@ -2450,6 +2591,7 @@
           ], buildImageSummaryRows());
           addCsvSection(rows, "外发端汇总", [
             "外发端",
+            "分发阶段",
             "已用次数",
             "使用上限",
             "剩余次数",
@@ -2466,6 +2608,7 @@
             "序号",
             "文件名",
             "产品标签",
+            "分发阶段",
             "图片说明",
             "外发端",
             "筛选结果",
@@ -2479,6 +2622,7 @@
             "文件名",
             "新文件名",
             "产品标签",
+            "分发阶段",
             "图片说明",
             "操作",
             "筛选结果",
@@ -2494,7 +2638,7 @@
       }
 
       function exportLogs() {
-        const rows = [["时间", "操作者", "图片序号", "文件名", "新文件名", "产品标签", "图片说明", "操作", "筛选结果", "留言", "原筛选结果", "原留言"], ...buildLogRows()];
+        const rows = [["时间", "操作者", "图片序号", "文件名", "新文件名", "产品标签", "分发阶段", "图片说明", "操作", "筛选结果", "留言", "原筛选结果", "原留言"], ...buildLogRows()];
         downloadCsv(rows, "产品委员会包装投票日志.csv");
       }
 
@@ -2515,14 +2659,17 @@
           },
           { keep: 0, hold: 0, out: 0 },
         );
+        const votersInSample = sampleVoters();
         return [
           ["导出时间", formatTime(new Date().toISOString())],
           ["项目", projectId],
           ["项目名称", projectInfo.name || projectId],
           ["产品标签", currentProductTag || "全部产品"],
+          ["统计阶段", selectedStageLabel()],
           ["图片总数", images.length],
-          ["外发端总数", voters.length],
-          ["已提交外发端数", voters.filter((voter) => Number(voter.submitCount || 0) > 0).length],
+          ["阶段样本外发端数", votersInSample.length],
+          ["全部外发端总数", voters.length],
+          ["阶段已提交外发端数", votersInSample.filter((voter) => Number(voter.submitCount || 0) > 0).length],
           ["入选总票数", totals.keep],
           ["待定总票数", totals.hold],
           ["排除总票数", totals.out],
@@ -2537,6 +2684,7 @@
             String(index + 1).padStart(2, "0"),
             file,
             productNameForFile(file),
+            selectedStageLabel(),
             descriptions[file] || "",
             summary.keep || 0,
             summary.hold || 0,
@@ -2551,12 +2699,13 @@
       }
 
       function buildVoterSummaryRows() {
-        return voters.map((voter) => {
+        return sampleVoters().map((voter) => {
           const counts = countVotesForVoter(voter.id);
           const used = Number(voter.voteClickCount || 0);
           const limit = usageLimitValue(voter);
           return [
             voter.name || voter.id,
+            voterStage(voter),
             used,
             limit === null ? "不限" : limit,
             limit === null ? "不限" : Math.max(0, limit - used),
@@ -2576,10 +2725,13 @@
         const rows = [];
         images.forEach((file, index) => {
           Object.entries(allVotes[file] || {}).forEach(([rowVoterId, vote]) => {
+            const voter = voterById(rowVoterId);
+            if (!stageMatchesVoter(voter)) return;
             rows.push([
               String(index + 1).padStart(2, "0"),
               file,
               productNameForFile(file),
+              voterStage(voter),
               descriptions[file] || "",
               voterName(rowVoterId),
               labels[vote.mark] || "",
@@ -2600,6 +2752,7 @@
           event.file || "",
           event.nextFile || "",
           event.productTag || imageProducts[event.file] || "",
+          event.distributionStage || voterStage(voterById(event.voterId)),
           descriptions[event.file] || "",
           actionLabels[event.action] || event.action || "",
           labels[event.mark] || "",
@@ -2611,14 +2764,14 @@
 
       function voterNamesByMark(file, mark) {
         return Object.entries(allVotes[file] || {})
-          .filter(([, vote]) => vote.mark === mark)
+          .filter(([rowVoterId, vote]) => vote.mark === mark && stageMatchesVoter(voterById(rowVoterId)))
           .map(([rowVoterId]) => voterName(rowVoterId))
           .join("；");
       }
 
       function notesForFile(file) {
         return Object.entries(allVotes[file] || {})
-          .filter(([, vote]) => vote.note)
+          .filter(([rowVoterId, vote]) => vote.note && stageMatchesVoter(voterById(rowVoterId)))
           .map(([rowVoterId, vote]) => `${voterName(rowVoterId)}：${vote.note}`)
           .join("；");
       }
@@ -2674,6 +2827,10 @@
         return voters.find((voter) => voter.id === rowVoterId)?.name || rowVoterId || "";
       }
 
+      function voterById(rowVoterId) {
+        return voters.find((voter) => voter.id === rowVoterId) || null;
+      }
+
       function imageNumber(file) {
         const index = images.indexOf(file);
         return index >= 0 ? String(index + 1).padStart(2, "0") : "";
@@ -2710,6 +2867,7 @@
 
       projectSearchInput.addEventListener("input", renderDecisionControls);
       productSearchInput.addEventListener("input", renderDecisionControls);
+      stageSearchInput.addEventListener("input", renderDecisionControls);
       projectSelect.addEventListener("change", () => switchProject(projectSelect.value));
       productSelect.addEventListener("change", () => {
         currentProductTag = normalizeProductTag(productSelect.value);
@@ -2718,8 +2876,17 @@
         updateProductUrl();
         loadRemoteState();
       });
+      stageSelect.addEventListener("change", () => {
+        currentDistributionStage = normalizeDistributionStage(stageSelect.value);
+        page = 0;
+        allEvents = [];
+        updateProductUrl();
+        summaries = buildStageSummaries(allVotes, currentDistributionStage);
+        render();
+      });
       newProjectBtn.addEventListener("click", createProject);
       newProductBtn.addEventListener("click", createProductTag);
+      newStageBtn.addEventListener("click", createDistributionStage);
 
       prevBtn.addEventListener("click", () => {
         page = Math.max(0, page - 1);
