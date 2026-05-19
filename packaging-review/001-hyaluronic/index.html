@@ -431,9 +431,12 @@
       }
 
       .tile:hover .tile-details,
-      .tile.details-open .tile-details,
       .tile:focus-within .tile-details {
         display: grid;
+      }
+
+      .image-wrap {
+        cursor: zoom-in;
       }
 
       .filename {
@@ -827,6 +830,99 @@
         background: #a90f0f;
       }
 
+      .image-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        display: none;
+        place-items: center;
+        padding: 18px;
+        background: rgba(15, 15, 15, 0.72);
+      }
+
+      .image-modal.open {
+        display: grid;
+      }
+
+      .image-modal-close {
+        position: absolute;
+        top: 14px;
+        right: 14px;
+        z-index: 2;
+        border: 1px solid rgba(255, 255, 255, 0.28);
+        color: #ffffff;
+        background: rgba(20, 20, 20, 0.74);
+      }
+
+      .image-modal-close:hover {
+        background: rgba(20, 20, 20, 0.95);
+      }
+
+      .image-preview-dialog {
+        display: grid;
+        grid-template-rows: minmax(0, 1fr) auto;
+        gap: 12px;
+        width: min(1120px, 100%);
+        max-height: calc(100dvh - 36px);
+      }
+
+      .image-preview-media {
+        display: grid;
+        min-height: 0;
+        place-items: center;
+        overflow: hidden;
+        border-radius: 8px;
+        background: #ffffff;
+      }
+
+      .image-preview-media img {
+        display: block;
+        max-width: 100%;
+        max-height: calc(100dvh - 190px);
+        object-fit: contain;
+      }
+
+      .image-preview-info {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 12px 14px;
+        color: var(--ink);
+        background: var(--panel);
+        box-shadow: 0 16px 42px rgba(0, 0, 0, 0.18);
+      }
+
+      .image-preview-info strong {
+        display: block;
+        overflow: hidden;
+        font-size: 16px;
+        line-height: 1.35;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .image-preview-info p {
+        margin: 7px 0 10px;
+        color: #3e3b35;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .image-preview-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .image-preview-meta span {
+        min-height: 26px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 4px 8px;
+        color: var(--muted);
+        background: rgba(255, 255, 255, 0.76);
+        font-size: 12px;
+      }
+
       @media (max-width: 1080px) {
         body {
           overflow: auto;
@@ -972,6 +1068,24 @@
           padding: 12px;
         }
 
+        .image-modal {
+          padding: 10px;
+        }
+
+        .image-modal-close {
+          top: 10px;
+          right: 10px;
+          height: 36px;
+        }
+
+        .image-preview-dialog {
+          max-height: calc(100dvh - 20px);
+        }
+
+        .image-preview-media img {
+          max-height: calc(100dvh - 220px);
+        }
+
         .confirm-dialog {
           width: 100%;
           padding: 16px;
@@ -1080,6 +1194,22 @@
         </div>
       </div>
     </div>
+    <div class="image-modal" id="imageModal" role="dialog" aria-modal="true" aria-labelledby="imagePreviewTitle">
+      <button class="button text image-modal-close" type="button" id="closeImageModalBtn">关闭</button>
+      <div class="image-preview-dialog">
+        <div class="image-preview-media">
+          <img id="imagePreviewImg" alt="" />
+        </div>
+        <div class="image-preview-info">
+          <strong id="imagePreviewTitle"></strong>
+          <p id="imagePreviewDescription"></p>
+          <div class="image-preview-meta">
+            <span id="imagePreviewProduct"></span>
+            <span id="imagePreviewVotes"></span>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <script>
       const initialImages = [
@@ -1182,6 +1312,7 @@
       let imageCacheBust = "";
       let pendingReplaceFile = "";
       let lastTouchVoteAt = 0;
+      let imagePreviewFile = "";
 
       const stage = document.querySelector("#stage");
       const empty = document.querySelector("#empty");
@@ -1223,6 +1354,13 @@
       const submitModal = document.querySelector("#submitModal");
       const cancelSubmitBtn = document.querySelector("#cancelSubmitBtn");
       const confirmSubmitBtn = document.querySelector("#confirmSubmitBtn");
+      const imageModal = document.querySelector("#imageModal");
+      const imagePreviewImg = document.querySelector("#imagePreviewImg");
+      const imagePreviewTitle = document.querySelector("#imagePreviewTitle");
+      const imagePreviewDescription = document.querySelector("#imagePreviewDescription");
+      const imagePreviewProduct = document.querySelector("#imagePreviewProduct");
+      const imagePreviewVotes = document.querySelector("#imagePreviewVotes");
+      const closeImageModalBtn = document.querySelector("#closeImageModalBtn");
 
       function projectFromPath() {
         const match = window.location.pathname.match(/\/packaging-review\/([^/]+)\//);
@@ -1495,6 +1633,7 @@
         notes = nextNotes;
         if (shouldRender && !focusedFile && !focusedDescriptionFile) {
           render();
+          refreshVisibleVoteSummaries();
         } else {
           updateSummary();
           refreshVisibleVoteSummaries();
@@ -1694,6 +1833,26 @@
 
       function closeSubmitModal() {
         submitModal.classList.remove("open");
+      }
+
+      function openImagePreview(item) {
+        const file = item.file;
+        const summary = summaries[file] || {};
+        imagePreviewFile = file;
+        imagePreviewImg.src = `${encodeURI(`images/${file}`)}${imageCacheBust ? `?v=${encodeURIComponent(imageCacheBust)}` : ""}`;
+        imagePreviewImg.alt = file;
+        imagePreviewTitle.textContent = `${String(item.index + 1).padStart(2, "0")} ${file}`;
+        imagePreviewDescription.textContent = descriptions[file] || "暂无说明";
+        imagePreviewProduct.textContent = `产品：${productNameForFile(file)}`;
+        imagePreviewVotes.textContent = `投票：入选 ${summary.keep || 0} / 待定 ${summary.hold || 0} / 排除 ${summary.out || 0}`;
+        imageModal.classList.add("open");
+        closeImageModalBtn.focus();
+      }
+
+      function closeImagePreview() {
+        imageModal.classList.remove("open");
+        imagePreviewFile = "";
+        imagePreviewImg.removeAttribute("src");
       }
 
       async function confirmSubmit() {
@@ -2069,6 +2228,12 @@
           const summary = summaries[node.dataset.voteSummaryFile || ""] || {};
           node.innerHTML = `<span>入选 ${summary.keep || 0}</span><span>待定 ${summary.hold || 0}</span><span>排除 ${summary.out || 0}</span>`;
         });
+        if (imagePreviewFile && imageModal.classList.contains("open")) {
+          const summary = summaries[imagePreviewFile] || {};
+          imagePreviewDescription.textContent = descriptions[imagePreviewFile] || "暂无说明";
+          imagePreviewProduct.textContent = `产品：${productNameForFile(imagePreviewFile)}`;
+          imagePreviewVotes.textContent = `投票：入选 ${summary.keep || 0} / 待定 ${summary.hold || 0} / 排除 ${summary.out || 0}`;
+        }
       }
 
       function render() {
@@ -2249,11 +2414,7 @@
 
           imageWrap.addEventListener("click", (event) => {
             event.stopPropagation();
-            tile.classList.toggle("details-open");
-          });
-          imageWrap.addEventListener("dblclick", (event) => {
-            event.stopPropagation();
-            window.open(encodeURI(`images/${item.file}`), "_blank");
+            openImagePreview(item);
           });
 
           caption.append(actions, details);
@@ -2579,6 +2740,10 @@
       submitModal.addEventListener("click", (event) => {
         if (event.target === submitModal) closeSubmitModal();
       });
+      closeImageModalBtn.addEventListener("click", closeImagePreview);
+      imageModal.addEventListener("click", (event) => {
+        if (event.target === imageModal) closeImagePreview();
+      });
       addImageBtn.addEventListener("click", () => addImageInput.click());
       addImageInput.addEventListener("change", () => addImages(Array.from(addImageInput.files || [])));
       replaceImageInput.addEventListener("change", () => replaceImage(pendingReplaceFile, replaceImageInput.files?.[0]));
@@ -2604,6 +2769,10 @@
       });
 
       window.addEventListener("keydown", (event) => {
+        if (imageModal.classList.contains("open")) {
+          if (event.key === "Escape") closeImagePreview();
+          return;
+        }
         if (submitModal.classList.contains("open")) {
           if (event.key === "Escape") closeSubmitModal();
           return;
