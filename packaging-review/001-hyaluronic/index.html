@@ -232,6 +232,15 @@
         padding: 0 10px;
       }
 
+      .button.text.danger {
+        color: var(--out);
+      }
+
+      .button.text.danger:hover {
+        color: #ffffff;
+        background: var(--out);
+      }
+
       .button.submit-button {
         min-width: 112px;
         padding: 0 18px;
@@ -690,7 +699,7 @@
 
       .voter-row {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) 120px auto auto;
+        grid-template-columns: minmax(0, 1fr) 120px auto auto auto;
         gap: 8px;
         align-items: center;
         padding: 10px 0;
@@ -1129,6 +1138,7 @@
         note: "留言",
         update: "更新",
         "update-voter-usage": "修改使用次数",
+        "delete-voter": "删除分发端",
         "submit-confirm": "提交确认",
         "project-create": "新增项目",
         "project-update": "修改项目",
@@ -1939,7 +1949,13 @@
             setSyncLabel("分发链接已复制");
           });
 
-          row.append(main, input, save, copy);
+          const remove = document.createElement("button");
+          remove.className = "button text danger";
+          remove.type = "button";
+          remove.textContent = "删除";
+          remove.addEventListener("click", () => deleteVoter(voter.id, voter.name));
+
+          row.append(main, input, save, copy, remove);
           voterList.append(row);
         });
       }
@@ -1972,6 +1988,31 @@
           setSyncLabel("使用次数已保存");
         } catch (error) {
           setSyncLabel(error.message || "保存失败", true);
+        }
+      }
+
+      async function deleteVoter(rowVoterId, name) {
+        const displayName = name || rowVoterId;
+        const confirmed = window.confirm(`确定删除分发端“${displayName}”吗？删除后该链接会失效，并从当前统计中移除该端投票；历史日志会保留。`);
+        if (!confirmed) return;
+        try {
+          setSyncLabel("删除分发端中");
+          const response = await fetch(voterSettingsUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              project: projectId,
+              productTag: currentProductTag,
+              voter: rowVoterId,
+              action: "delete",
+            }),
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+          applyRemoteState(payload, true);
+          setSyncLabel("分发端已删除");
+        } catch (error) {
+          setSyncLabel(error.message || "删除失败", true);
         }
       }
 

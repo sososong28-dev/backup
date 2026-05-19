@@ -405,6 +405,28 @@ async function handlePackagingReviewVoterSettings(req, res) {
     return;
   }
 
+  const action = String(body.action || "update").trim().toLowerCase();
+  if (action === "delete") {
+    const removedVotes = removeReviewVoterVotes(projectState, voterId);
+    const now = new Date().toISOString();
+    delete projectState.voters[voterId];
+    projectState.updatedAt = now;
+    appendReviewEvent(projectState, {
+      action: "delete-voter",
+      voterId,
+      voterName: voter.name,
+      productTag: voter.productTag,
+      note: removedVotes ? `删除分发端，清理 ${removedVotes} 条投票` : "删除分发端",
+    });
+    writePackagingReviewState(state);
+    sendJson(res, 200, buildReviewPayload(project, state, { productTag }));
+    return;
+  }
+  if (action && action !== "update") {
+    sendJson(res, 400, { ok: false, error: "Invalid voter settings action." });
+    return;
+  }
+
   const usageLimit = normalizeUsageLimit(body.usageLimit);
   const previousUsageLimit = normalizeUsageLimit(voter.usageLimit);
   if (previousUsageLimit === usageLimit) {
@@ -845,6 +867,19 @@ function isUsageLimitReached(voter) {
   const usageLimit = normalizeUsageLimit(voter.usageLimit);
   if (usageLimit === null) return false;
   return Number(voter.voteClickCount || 0) >= usageLimit;
+}
+
+function removeReviewVoterVotes(projectState, voterId) {
+  let removedVotes = 0;
+  Object.keys(projectState.votes || {}).forEach((file) => {
+    if (!projectState.votes[file]?.[voterId]) return;
+    delete projectState.votes[file][voterId];
+    removedVotes += 1;
+    if (Object.keys(projectState.votes[file]).length === 0) {
+      delete projectState.votes[file];
+    }
+  });
+  return removedVotes;
 }
 
 function formatUsageLimitText(value) {
