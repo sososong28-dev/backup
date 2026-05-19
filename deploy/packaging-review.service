@@ -9,6 +9,8 @@ ExecStart=/usr/bin/node /var/www/packaging-review/server.mjs
 Environment=HOST=127.0.0.1
 Environment=PORT=4180
 Environment=PACKAGING_REVIEW_STATE_DIR=/var/lib/packaging-review
+Environment=PACKAGING_REVIEW_IMAGES_DIR=/var/lib/packaging-review/images
+Environment=PACKAGING_REVIEW_PREVIEW_DIR=/var/lib/packaging-review/previews
 Restart=always
 RestartSec=3
 User=www-data

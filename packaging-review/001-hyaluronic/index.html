@@ -4,6 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex,nofollow" />
+    <script>
+      (function () {
+        var needsCompat =
+          !!document.documentMode ||
+          !window.fetch ||
+          !window.Promise ||
+          !window.URLSearchParams ||
+          !window.Map ||
+          !window.Set;
+        if (!needsCompat) return;
+        var compatTarget = "ie.html" + (window.location.search || "") + (window.location.hash || "");
+        window.location.replace(compatTarget);
+      })();
+    </script>
     <link
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f766e'/%3E%3Cpath d='M8 17h16v3H8zM8 11h16v3H8z' fill='white'/%3E%3C/svg%3E"
@@ -384,7 +398,7 @@
         position: absolute;
         top: 8px;
         right: 8px;
-        display: none;
+        display: none !important;
         height: 28px;
         align-items: center;
         padding: 0 9px;
@@ -424,7 +438,7 @@
       }
 
       .tile-details {
-        display: none;
+        display: none !important;
         grid-template-columns: 1fr;
         gap: 7px;
         min-width: 0;
@@ -460,8 +474,8 @@
       .actions.summary-actions .mark {
         width: 100%;
         min-width: 0;
-        padding: 0 5px;
-        font-size: 12px;
+        padding: 0;
+        font-size: 20px;
         font-weight: 800;
       }
 
@@ -602,14 +616,17 @@
       }
 
       .mark {
-        width: 28px;
-        height: 28px;
+        width: 100%;
+        min-width: 0;
+        height: 40px;
         border: 1px solid var(--line);
         border-radius: 6px;
         color: #4a4842;
         background: #ffffff;
         cursor: pointer;
         user-select: none;
+        font-size: 20px;
+        font-weight: 800;
       }
 
       .mark:hover {
@@ -862,8 +879,7 @@
 
       .image-preview-dialog {
         display: grid;
-        grid-template-rows: minmax(0, 1fr) auto;
-        gap: 12px;
+        grid-template-rows: minmax(0, 1fr);
         width: min(1120px, 100%);
         max-height: calc(100dvh - 36px);
       }
@@ -880,17 +896,12 @@
       .image-preview-media img {
         display: block;
         max-width: 100%;
-        max-height: calc(100dvh - 190px);
+        max-height: calc(100dvh - 72px);
         object-fit: contain;
       }
 
       .image-preview-info {
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        padding: 12px 14px;
-        color: var(--ink);
-        background: var(--panel);
-        box-shadow: 0 16px 42px rgba(0, 0, 0, 0.18);
+        display: none;
       }
 
       .image-preview-info strong {
@@ -1280,8 +1291,11 @@
       const submitUrl = "/api/packaging-review/submit";
       const descriptionUrl = "/api/packaging-review/description";
       const imageUrl = "/api/packaging-review/image";
+      const previewMaxEdge = 1280;
+      const previewQuality = 0.82;
       const syncIntervalMs = 1000;
       const labels = { keep: "入选", hold: "待定", out: "排除" };
+      const markSymbols = { keep: "✓", hold: "?", out: "×" };
       const actionLabels = {
         "create-voter": "新增外发端",
         vote: "投票",
@@ -1292,6 +1306,7 @@
         update: "更新",
         "update-voter-usage": "修改使用次数",
         "update-voter-settings": "修改分发设置",
+        "reset-voter-session": "重置分发记录",
         "delete-voter": "删除分发端",
         "submit-confirm": "提交确认",
         "project-create": "新增项目",
@@ -1379,7 +1394,8 @@
 
       function projectFromPath() {
         const match = window.location.pathname.match(/\/packaging-review\/([^/]+)\//);
-        return /^[a-z0-9][a-z0-9-]{0,80}$/i.test(match?.[1] || "") ? match[1] : defaultProjectId;
+        const project = match && match[1] ? match[1] : "";
+        return /^[a-z0-9][a-z0-9-]{0,80}$/i.test(project) ? project : defaultProjectId;
       }
 
       function normalizeProductTag(value) {
@@ -1426,6 +1442,13 @@
         return `/api/packaging-review/state?${params.toString()}`;
       }
 
+      function reviewImageSrc(file, variant = "preview") {
+        const params = new URLSearchParams({ project: projectId, file });
+        if (variant) params.set("variant", variant);
+        if (imageCacheBust) params.set("v", imageCacheBust);
+        return `${imageUrl}?${params.toString()}`;
+      }
+
       function setSyncLabel(text, isError = false) {
         syncLabel.textContent = text;
         syncLabel.classList.toggle("error", isError);
@@ -1450,11 +1473,11 @@
       function hasUsageRemaining(voter) {
         const limit = usageLimitValue(voter);
         if (limit === null) return true;
-        return Number(voter?.voteClickCount || 0) < limit;
+        return Number((voter && voter.voteClickCount) || 0) < limit;
       }
 
       function usageLimitValue(voter) {
-        const value = voter?.usageLimit;
+        const value = voter ? voter.usageLimit : undefined;
         return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : null;
       }
 
@@ -1485,7 +1508,7 @@
       }
 
       function voterStage(voter) {
-        return normalizeDistributionStage(voter?.distributionStage) || "第一次分发";
+        return normalizeDistributionStage(voter && voter.distributionStage) || "第一次分发";
       }
 
       function selectedStageLabel() {
@@ -1545,6 +1568,40 @@
         });
       }
 
+      function sameStringList(left, right) {
+        if (left === right) return true;
+        if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+        return left.every((value, index) => value === right[index]);
+      }
+
+      function currentPageFiles() {
+        const pageSize = currentLayout().pageSize;
+        const items = getFilteredImages();
+        const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+        const safePage = Math.min(page, totalPages - 1);
+        return items.slice(safePage * pageSize, safePage * pageSize + pageSize).map((item) => item.file);
+      }
+
+      function visibleVoteSignature(files) {
+        return files.map((file) => `${file}:${marks[file] || ""}:${notes[file] || ""}`).join("|");
+      }
+
+      function payloadVisibleVoteSignature(files, payloadVotes = {}) {
+        return files.map((file) => `${file}:${(payloadVotes[file] && payloadVotes[file].mark) || ""}:${(payloadVotes[file] && payloadVotes[file].note) || ""}`).join("|");
+      }
+
+      function shouldRenderRemoteStage(payload) {
+        const nextImages = Array.isArray(payload.images) ? payload.images : [];
+        if (!sameStringList(images, nextImages)) return true;
+        if ((payload.imageVersion || "") !== imageCacheBust) return true;
+        if (Boolean(currentVoter) !== Boolean(payload.voter)) return true;
+        if (((currentVoter && currentVoter.id) || "") !== ((payload.voter && payload.voter.id) || "")) return true;
+        if (voterStage(currentVoter) !== voterStage(payload.voter)) return true;
+        if (hasUsageRemaining(currentVoter) !== hasUsageRemaining(payload.voter)) return true;
+        const files = currentPageFiles();
+        return visibleVoteSignature(files) !== payloadVisibleVoteSignature(files, payload.currentVotes || {});
+      }
+
       function getFilteredImages() {
         return images
           .map((file, index) => ({ file, index }))
@@ -1581,7 +1638,7 @@
         usageLabel.classList.toggle("sync-state", Boolean(currentVoter));
         usageLabel.classList.toggle("error", Boolean(currentVoter && !hasUsageRemaining(currentVoter)));
         submitLabel.textContent = submitText(currentVoter);
-        submitLabel.classList.toggle("sync-state", Boolean(currentVoter?.submitCount));
+        submitLabel.classList.toggle("sync-state", Boolean(currentVoter && currentVoter.submitCount));
         submitLabel.classList.toggle("error", Boolean(voterId && !currentVoter));
       }
 
@@ -1597,9 +1654,14 @@
           window.alert(message);
           return;
         }
-        marks[file] = value;
+        const isSameMark = marks[file] === value;
+        if (isSameMark) {
+          delete marks[file];
+        } else {
+          marks[file] = value;
+        }
         render();
-        syncVote(file, { recordClick: true });
+        syncVote(file, { recordClick: !isSameMark });
       }
 
       function handleMarkPointer(event, file, value) {
@@ -1654,17 +1716,19 @@
 
       function activeNoteFile() {
         const active = document.activeElement;
-        return active?.classList?.contains("note-input") ? active.dataset.file || "" : "";
+        return active && active.classList && active.classList.contains("note-input") ? active.dataset.file || "" : "";
       }
 
       function activeDescriptionFile() {
         const active = document.activeElement;
-        return active?.classList?.contains("description-input") ? active.dataset.file || "" : "";
+        return active && active.classList && active.classList.contains("description-input") ? active.dataset.file || "" : "";
       }
 
       function activeVoterSettingsId() {
         const active = document.activeElement;
-        const isSettingsInput = active?.classList?.contains("usage-input") || active?.classList?.contains("stage-input");
+        const isSettingsInput =
+          Boolean(active && active.classList && active.classList.contains("usage-input")) ||
+          Boolean(active && active.classList && active.classList.contains("stage-input"));
         return isSettingsInput ? active.dataset.voter || "" : "";
       }
 
@@ -1692,7 +1756,7 @@
         if (currentVoter) currentDistributionStage = voterStage(currentVoter);
         summaries = buildStageSummaries(allVotes, currentDistributionStage);
         recentEvents = Array.isArray(payload.recentEvents) ? payload.recentEvents : [];
-        imageCacheBust = payload.updatedAt || imageCacheBust;
+        imageCacheBust = payload.imageVersion || imageCacheBust;
         Object.entries(payload.currentVotes || {}).forEach(([file, item]) => {
           if (item.mark) nextMarks[file] = item.mark;
           if (item.note) nextNotes[file] = item.note;
@@ -1778,10 +1842,35 @@
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           const payload = await response.json();
           if (!payload.ok) throw new Error(payload.error || "Sync failed");
-          applyRemoteState(payload, true);
+          applyRemoteState(payload, silent ? shouldRenderRemoteStage(payload) : true);
           setSyncLabel("已同步");
         } catch {
           setSyncLabel("同步失败", true);
+        }
+      }
+
+      async function resetCurrentVoterSession() {
+        if (!voterId) return false;
+        try {
+          setSyncLabel("正在清空当前分发记录");
+          const response = await fetch(voterSettingsUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "reset-session",
+              project: projectId,
+              voter: voterId,
+              productTag: currentProductTag,
+            }),
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+          applyRemoteState(payload, true);
+          setSyncLabel("已清空当前分发记录");
+          return true;
+        } catch (error) {
+          setSyncLabel(error.message || "清空当前分发记录失败", true);
+          return false;
         }
       }
 
@@ -1920,7 +2009,7 @@
       }
 
       async function copyText(text) {
-        if (navigator.clipboard?.writeText) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
           try {
             await navigator.clipboard.writeText(text);
             return;
@@ -1948,7 +2037,7 @@
         const file = item.file;
         const summary = summaries[file] || {};
         imagePreviewFile = file;
-        imagePreviewImg.src = `${encodeURI(`images/${file}`)}${imageCacheBust ? `?v=${encodeURIComponent(imageCacheBust)}` : ""}`;
+        imagePreviewImg.src = reviewImageSrc(file, "preview");
         imagePreviewImg.alt = file;
         imagePreviewTitle.textContent = `${String(item.index + 1).padStart(2, "0")} ${file}`;
         imagePreviewDescription.textContent = descriptions[file] || "暂无说明";
@@ -1996,10 +2085,12 @@
           setSyncLabel("上传图片中");
           for (const file of files) {
             const dataUrl = await readFileAsDataUrl(file);
+            const previewDataUrl = await createPreviewDataUrl(dataUrl);
             const payload = await sendImageRequest({
               action: "add",
               name: file.name,
               dataUrl,
+              previewDataUrl,
             });
             applyRemoteState(payload, false);
           }
@@ -2018,10 +2109,12 @@
         try {
           setSyncLabel("替换图片中");
           const dataUrl = await readFileAsDataUrl(selectedFile);
+          const previewDataUrl = await createPreviewDataUrl(dataUrl);
           const payload = await sendImageRequest({
             action: "replace",
             file,
             dataUrl,
+            previewDataUrl,
           });
           allEvents = [];
           applyRemoteState(payload, true);
@@ -2140,6 +2233,41 @@
           reader.addEventListener("load", () => resolve(String(reader.result || "")));
           reader.addEventListener("error", () => reject(new Error("读取图片失败。")));
           reader.readAsDataURL(file);
+        });
+      }
+
+      async function createPreviewDataUrl(sourceDataUrl) {
+        return new Promise((resolve) => {
+          const image = new Image();
+          image.addEventListener("load", () => {
+            const width = image.naturalWidth || image.width || 0;
+            const height = image.naturalHeight || image.height || 0;
+            if (!width || !height) {
+              resolve("");
+              return;
+            }
+            const scale = Math.min(1, previewMaxEdge / Math.max(width, height));
+            const canvas = document.createElement("canvas");
+            canvas.width = Math.max(1, Math.round(width * scale));
+            canvas.height = Math.max(1, Math.round(height * scale));
+            const context = canvas.getContext("2d", { alpha: false });
+            if (!context) {
+              resolve("");
+              return;
+            }
+            context.fillStyle = "#ffffff";
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            context.imageSmoothingEnabled = true;
+            context.imageSmoothingQuality = "high";
+            context.drawImage(image, 0, 0, canvas.width, canvas.height);
+            let previewDataUrl = canvas.toDataURL("image/webp", previewQuality);
+            if (!previewDataUrl.startsWith("data:image/webp")) {
+              previewDataUrl = canvas.toDataURL("image/jpeg", previewQuality);
+            }
+            resolve(previewDataUrl.startsWith("data:image/") ? previewDataUrl : "");
+          });
+          image.addEventListener("error", () => resolve(""));
+          image.src = sourceDataUrl;
         });
       }
 
@@ -2265,8 +2393,9 @@
         const url = new URL(window.location.href);
         url.search = "";
         url.searchParams.set("voter", rowVoterId);
-        const tag = voters.find((voter) => voter.id === rowVoterId)?.productTag || "";
-        const stage = voterStage(voters.find((voter) => voter.id === rowVoterId));
+        const voter = voters.find((item) => item.id === rowVoterId) || null;
+        const tag = voter ? voter.productTag || "" : "";
+        const stage = voterStage(voter);
         if (tag) url.searchParams.set("product", tag);
         if (stage) url.searchParams.set("stage", stage);
         return url.toString();
@@ -2358,11 +2487,8 @@
 
       function refreshVisibleVoteSummaries() {
         document.querySelectorAll("[data-summary-file][data-summary-mark]").forEach((button) => {
-          const file = button.dataset.summaryFile || "";
           const mark = button.dataset.summaryMark || "";
-          const summary = summaries[file] || {};
-          const title = button.getAttribute("aria-label") || labels[mark] || mark;
-          if (canManageImages()) button.textContent = `${title} ${summary[mark] || 0}`;
+          button.textContent = markSymbols[mark] || "";
         });
         document.querySelectorAll("[data-vote-summary-file]").forEach((node) => {
           const summary = summaries[node.dataset.voteSummaryFile || ""] || {};
@@ -2404,9 +2530,9 @@
           imageWrap.className = "image-wrap";
 
           const img = document.createElement("img");
-          img.src = `${encodeURI(`images/${item.file}`)}${imageCacheBust ? `?v=${encodeURIComponent(imageCacheBust)}` : ""}`;
+          img.src = reviewImageSrc(item.file, "preview");
           img.alt = item.file;
-          img.loading = "eager";
+          img.loading = "lazy";
           img.decoding = "async";
           imageWrap.append(img);
 
@@ -2441,7 +2567,7 @@
             button.setAttribute("aria-label", title);
             button.dataset.summaryFile = item.file;
             button.dataset.summaryMark = value;
-            button.textContent = canManageImages() ? `${title} ${summary[value] || 0}` : isMobileViewport() ? title : text;
+            button.textContent = markSymbols[value] || text;
             button.disabled = !canClickVote;
             button.addEventListener("pointerup", (event) => handleMarkPointer(event, item.file, value));
             button.addEventListener("click", (event) => handleMarkClick(event, item.file, value));
@@ -2779,7 +2905,7 @@
       function countVotesForVoter(rowVoterId) {
         return images.reduce(
           (counts, file) => {
-            const vote = allVotes[file]?.[rowVoterId];
+            const vote = allVotes[file] && allVotes[file][rowVoterId];
             if (!vote) return counts;
             const mark = vote.mark || "";
             if (counts[mark] !== undefined) counts[mark] += 1;
@@ -2791,7 +2917,7 @@
       }
 
       function downloadCsv(rows, filename) {
-        const csv = rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(",")).join("\n");
+        const csv = rows.map((row) => row.map((cell) => `"${String(cell).split('"').join('""')}"`).join(",")).join("\n");
         const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
         const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
@@ -2824,7 +2950,8 @@
       }
 
       function voterName(rowVoterId) {
-        return voters.find((voter) => voter.id === rowVoterId)?.name || rowVoterId || "";
+        const voter = voters.find((item) => item.id === rowVoterId) || null;
+        return (voter && voter.name) || rowVoterId || "";
       }
 
       function voterById(rowVoterId) {
@@ -2913,7 +3040,9 @@
       });
       addImageBtn.addEventListener("click", () => addImageInput.click());
       addImageInput.addEventListener("change", () => addImages(Array.from(addImageInput.files || [])));
-      replaceImageInput.addEventListener("change", () => replaceImage(pendingReplaceFile, replaceImageInput.files?.[0]));
+      replaceImageInput.addEventListener("change", () =>
+        replaceImage(pendingReplaceFile, replaceImageInput.files && replaceImageInput.files[0]),
+      );
       logBtn.addEventListener("click", openLogs);
       closeLogBtn.addEventListener("click", () => logPanel.classList.remove("open"));
       closeVoterPanelBtn.addEventListener("click", () => voterPanel.classList.remove("open"));
@@ -2949,11 +3078,20 @@
         if (event.key.toLowerCase() === "f") fullBtn.click();
       });
 
-      syncHostControls();
-      renderDecisionControls();
-      render();
-      loadRemoteState();
-      window.setInterval(() => loadRemoteState({ silent: true }), syncIntervalMs);
+      async function initializePage() {
+        syncHostControls();
+        renderDecisionControls();
+        render();
+        if (voterId) {
+          const resetApplied = await resetCurrentVoterSession();
+          if (!resetApplied) await loadRemoteState();
+        } else {
+          await loadRemoteState();
+        }
+        window.setInterval(() => loadRemoteState({ silent: true }), syncIntervalMs);
+      }
+
+      initializePage();
     </script>
   </body>
 </html>

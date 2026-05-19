@@ -17,6 +17,13 @@ const PORT = Number(process.env.PORT || 4173);
 const HOST = process.env.HOST || "0.0.0.0";
 const ROOT = resolve(process.cwd());
 const PACKAGING_REVIEW_STATE_DIR = resolve(process.env.PACKAGING_REVIEW_STATE_DIR || join(ROOT, "data"));
+const PACKAGING_REVIEW_IMAGES_DIR = resolve(
+  process.env.PACKAGING_REVIEW_IMAGES_DIR || join(PACKAGING_REVIEW_STATE_DIR, "images"),
+);
+const PACKAGING_REVIEW_PREVIEW_DIR = resolve(
+  process.env.PACKAGING_REVIEW_PREVIEW_DIR || join(PACKAGING_REVIEW_STATE_DIR, "previews"),
+);
+const HAS_EXTERNAL_REVIEW_IMAGES_DIR = Boolean(process.env.PACKAGING_REVIEW_IMAGES_DIR);
 const PACKAGING_REVIEW_STATE_FILE = resolve(
   process.env.PACKAGING_REVIEW_STATE_FILE || join(PACKAGING_REVIEW_STATE_DIR, "packaging-review-state.json"),
 );
@@ -108,6 +115,10 @@ createServer(async (req, res) => {
     }
     if (req.method === "POST" && url.pathname === "/api/packaging-review/description") {
       await handlePackagingReviewDescription(req, res);
+      return;
+    }
+    if ((req.method === "GET" || req.method === "HEAD") && url.pathname === "/api/packaging-review/image") {
+      await handlePackagingReviewImageFile(url, req, res);
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/packaging-review/image") {
@@ -412,7 +423,7 @@ async function handlePackagingReviewVoterSettings(req, res) {
 
   const action = String(body.action || "update").trim().toLowerCase();
   if (action === "delete") {
-    const removedVotes = removeReviewVoterVotes(projectState, voterId);
+    const removedVotes = removeReviewVoterVotes(projectState.votes, voterId) + removeReviewVoterVotes(projectState.draftVotes, voterId);
     const now = new Date().toISOString();
     delete projectState.voters[voterId];
     projectState.updatedAt = now;
@@ -426,6 +437,25 @@ async function handlePackagingReviewVoterSettings(req, res) {
     });
     writePackagingReviewState(state);
     sendJson(res, 200, buildReviewPayload(project, state, { productTag }));
+    return;
+  }
+  if (action === "reset-session") {
+    const resetResult = resetReviewVoterSession(projectState, voterId);
+    if (resetResult.changed) {
+      const now = new Date().toISOString();
+      voter.updatedAt = now;
+      projectState.updatedAt = now;
+      appendReviewEvent(projectState, {
+        action: "reset-voter-session",
+        voterId,
+        voterName: voter.name,
+        productTag: voter.productTag,
+        distributionStage: voter.distributionStage,
+        note: `閲嶇疆鍒嗗彂璁板綍锛屾竻鐞?${resetResult.removedVotes} 鏉℃姇绁紝宸叉彁浜?${resetResult.previousSubmitCount} 娆★紝宸茬偣鍑?${resetResult.previousVoteClickCount} 娆?`,
+      });
+      writePackagingReviewState(state);
+    }
+    sendJson(res, 200, buildReviewPayload(project, state, { voterId }));
     return;
   }
   if (action && action !== "update") {
@@ -494,8 +524,8 @@ async function handlePackagingReviewVote(req, res) {
     return;
   }
 
-  if (!projectState.votes[file]) projectState.votes[file] = {};
-  const previous = projectState.votes[file][voterId] || {};
+  if (!projectState.draftVotes[file]) projectState.draftVotes[file] = {};
+  const previous = projectState.draftVotes[file][voterId] || {};
   const previousMark = previous.mark || "";
   const previousNote = previous.note || "";
   if (previousMark === mark && previousNote === note && !recordClick) {
@@ -515,12 +545,12 @@ async function handlePackagingReviewVote(req, res) {
   else delete nextItem.note;
 
   if (nextItem.mark || nextItem.note) {
-    projectState.votes[file][voterId] = nextItem;
+    projectState.draftVotes[file][voterId] = nextItem;
   } else {
-    delete projectState.votes[file][voterId];
+    delete projectState.draftVotes[file][voterId];
   }
-  if (projectState.votes[file] && Object.keys(projectState.votes[file]).length === 0) {
-    delete projectState.votes[file];
+  if (projectState.draftVotes[file] && Object.keys(projectState.draftVotes[file]).length === 0) {
+    delete projectState.draftVotes[file];
   }
 
   if (recordClick) voter.voteClickCount = Number(voter.voteClickCount || 0) + 1;
@@ -559,6 +589,15 @@ async function handlePackagingReviewSubmit(req, res) {
   }
 
   const now = new Date().toISOString();
+  removeReviewVoterVotes(projectState.votes, voterId);
+  Object.entries(projectState.draftVotes || {}).forEach(([file, byVoter]) => {
+    if (!byVoter || !byVoter[voterId]) return;
+    if (!projectState.votes[file]) projectState.votes[file] = {};
+    projectState.votes[file][voterId] = {
+      ...byVoter[voterId],
+      updatedAt: now,
+    };
+  });
   voter.submitCount = Math.max(0, Math.floor(Number(voter.submitCount || 0))) + 1;
   voter.submittedAt = now;
   voter.updatedAt = now;
@@ -649,10 +688,34 @@ async function handlePackagingReviewImage(req, res) {
   sendJson(res, 400, { ok: false, error: "Invalid image action." });
 }
 
+async function handlePackagingReviewImageFile(url, req, res) {
+  const project = normalizeReviewProject(url.searchParams.get("project"));
+  const file = normalizeReviewFile(url.searchParams.get("file"));
+  const variant = String(url.searchParams.get("variant") || "preview").trim().toLowerCase();
+  if (!file) {
+    sendJson(res, 400, { ok: false, error: "Invalid file." });
+    return;
+  }
+
+  const filePath = variant === "original" ? resolveExistingReviewImagePath(project, file) : resolveExistingReviewPreviewOrOriginalPath(project, file);
+  if (!existsSync(filePath)) {
+    sendJson(res, 404, { ok: false, error: "Image not found." });
+    return;
+  }
+
+  const cacheControl = url.searchParams.get("v") ? "public, max-age=31536000, immutable" : "private, max-age=300";
+  await streamStaticFile(filePath, req, res, { "Cache-Control": cacheControl });
+}
+
 function handlePackagingReviewImageAdd(project, body, res) {
   const image = parseReviewImageDataUrl(body.dataUrl);
   if (!image.ok) {
     sendJson(res, 400, { ok: false, error: image.error });
+    return;
+  }
+  const preview = parseOptionalReviewPreviewDataUrl(body.previewDataUrl);
+  if (!preview.ok) {
+    sendJson(res, 400, { ok: false, error: preview.error });
     return;
   }
 
@@ -660,6 +723,7 @@ function handlePackagingReviewImageAdd(project, body, res) {
   const requestedName = normalizeReviewImageName(body.name, image.ext);
   const file = createUniqueReviewImageName(imagesDir, requestedName);
   writeFileSync(getReviewImagePath(project, file), image.buffer);
+  if (!preview.empty) writeReviewPreview(project, file, preview);
 
   const state = readPackagingReviewState();
   const projectState = getReviewProjectState(state, project);
@@ -686,7 +750,7 @@ function handlePackagingReviewImageReplace(project, body, res) {
     sendJson(res, 400, { ok: false, error: "Invalid file." });
     return;
   }
-  const targetPath = getReviewImagePath(project, file);
+  const targetPath = resolveExistingReviewImagePath(project, file);
   if (!existsSync(targetPath)) {
     sendJson(res, 404, { ok: false, error: "Image not found." });
     return;
@@ -697,6 +761,11 @@ function handlePackagingReviewImageReplace(project, body, res) {
     sendJson(res, 400, { ok: false, error: image.error });
     return;
   }
+  const preview = parseOptionalReviewPreviewDataUrl(body.previewDataUrl);
+  if (!preview.ok) {
+    sendJson(res, 400, { ok: false, error: preview.error });
+    return;
+  }
   if (!isSameReviewImageExtension(extname(file).toLowerCase(), image.ext)) {
     sendJson(res, 400, { ok: false, error: "替换图片需保持同一格式。" });
     return;
@@ -705,6 +774,7 @@ function handlePackagingReviewImageReplace(project, body, res) {
   const tempPath = `${targetPath}.${process.pid}.tmp`;
   writeFileSync(tempPath, image.buffer);
   renameSync(tempPath, targetPath);
+  if (!preview.empty) writeReviewPreview(project, file, preview);
 
   const state = readPackagingReviewState();
   const projectState = getReviewProjectState(state, project);
@@ -725,7 +795,7 @@ function handlePackagingReviewImageRename(project, body, res) {
     sendJson(res, 400, { ok: false, error: "Invalid file." });
     return;
   }
-  const sourcePath = getReviewImagePath(project, file);
+  const sourcePath = resolveExistingReviewImagePath(project, file);
   if (!existsSync(sourcePath)) {
     sendJson(res, 404, { ok: false, error: "Image not found." });
     return;
@@ -749,12 +819,17 @@ function handlePackagingReviewImageRename(project, body, res) {
   }
 
   renameSync(sourcePath, targetPath);
+  renameReviewPreview(project, file, nextFile);
 
   const state = readPackagingReviewState();
   const projectState = getReviewProjectState(state, project);
   if (projectState.votes[file]) {
     projectState.votes[nextFile] = projectState.votes[file];
     delete projectState.votes[file];
+  }
+  if (projectState.draftVotes[file]) {
+    projectState.draftVotes[nextFile] = projectState.draftVotes[file];
+    delete projectState.draftVotes[file];
   }
   if (projectState.descriptions[file]) {
     projectState.descriptions[nextFile] = projectState.descriptions[file];
@@ -782,7 +857,7 @@ function handlePackagingReviewImageDelete(project, body, res) {
     sendJson(res, 400, { ok: false, error: "Invalid file." });
     return;
   }
-  const imagePath = getReviewImagePath(project, file);
+  const imagePath = resolveExistingReviewImagePath(project, file);
   if (!existsSync(imagePath)) {
     sendJson(res, 404, { ok: false, error: "Image not found." });
     return;
@@ -790,9 +865,11 @@ function handlePackagingReviewImageDelete(project, body, res) {
 
   const state = readPackagingReviewState();
   const projectState = getReviewProjectState(state, project);
-  const removedVotes = Object.keys(projectState.votes[file] || {}).length;
+  const removedVotes = Object.keys(projectState.votes[file] || {}).length + Object.keys(projectState.draftVotes[file] || {}).length;
   unlinkSync(imagePath);
+  removeReviewPreview(project, file);
   delete projectState.votes[file];
+  delete projectState.draftVotes[file];
   delete projectState.descriptions[file];
   delete projectState.imageProducts[file];
   projectState.updatedAt = new Date().toISOString();
@@ -867,6 +944,21 @@ function isAllowedReviewImageExt(extension) {
   return [".png", ".jpg", ".jpeg", ".webp", ".gif"].includes(String(extension || "").toLowerCase());
 }
 
+function buildReviewImageVersion(project, images) {
+  let maxMtime = 0;
+  for (const file of images || []) {
+    const originalPath = resolveExistingReviewImagePath(project, file);
+    if (existsSync(originalPath)) {
+      maxMtime = Math.max(maxMtime, Number(statSync(originalPath).mtimeMs || 0));
+    }
+    const previewPath = findExistingReviewPreviewPath(project, file);
+    if (previewPath && existsSync(previewPath)) {
+      maxMtime = Math.max(maxMtime, Number(statSync(previewPath).mtimeMs || 0));
+    }
+  }
+  return `${(images || []).length}-${Math.floor(maxMtime).toString(36)}`;
+}
+
 function isSameReviewImageExtension(left, right) {
   const normalize = (extension) => (extension === ".jpeg" ? ".jpg" : extension);
   return normalize(left) === normalize(right);
@@ -890,17 +982,39 @@ function isUsageLimitReached(voter) {
   return Number(voter.voteClickCount || 0) >= usageLimit;
 }
 
-function removeReviewVoterVotes(projectState, voterId) {
+function removeReviewVoterVotes(votesByFile, voterId) {
   let removedVotes = 0;
-  Object.keys(projectState.votes || {}).forEach((file) => {
-    if (!projectState.votes[file]?.[voterId]) return;
-    delete projectState.votes[file][voterId];
+  Object.keys(votesByFile || {}).forEach((file) => {
+    if (!votesByFile[file]?.[voterId]) return;
+    delete votesByFile[file][voterId];
     removedVotes += 1;
-    if (Object.keys(projectState.votes[file]).length === 0) {
-      delete projectState.votes[file];
+    if (Object.keys(votesByFile[file]).length === 0) {
+      delete votesByFile[file];
     }
   });
   return removedVotes;
+}
+
+function resetReviewVoterSession(projectState, voterId) {
+  const voter = projectState.voters[voterId];
+  if (!voter) {
+    return {
+      changed: false,
+      removedVotes: 0,
+      previousVoteClickCount: 0,
+      previousSubmitCount: 0,
+    };
+  }
+  const removedVotes = removeReviewVoterVotes(projectState.draftVotes, voterId);
+  const previousVoteClickCount = Math.max(0, Math.floor(Number(voter.voteClickCount || 0)));
+  const previousSubmitCount = Math.max(0, Math.floor(Number(voter.submitCount || 0)));
+  voter.voteClickCount = 0;
+  return {
+    changed: Boolean(removedVotes || previousVoteClickCount),
+    removedVotes,
+    previousVoteClickCount,
+    previousSubmitCount,
+  };
 }
 
 function formatUsageLimitText(value) {
@@ -940,6 +1054,7 @@ function getReviewProjectState(state, project) {
       imageProducts: {},
       voters: {},
       votes: {},
+      draftVotes: {},
       descriptions: {},
       events: [],
     };
@@ -956,6 +1071,7 @@ function getReviewProjectState(state, project) {
   if (!projectState.imageProducts || typeof projectState.imageProducts !== "object") projectState.imageProducts = {};
   if (!projectState.voters || typeof projectState.voters !== "object") projectState.voters = {};
   if (!projectState.votes || typeof projectState.votes !== "object") projectState.votes = {};
+  if (!projectState.draftVotes || typeof projectState.draftVotes !== "object") projectState.draftVotes = {};
   if (!projectState.descriptions || typeof projectState.descriptions !== "object") projectState.descriptions = {};
   if (!Array.isArray(projectState.events)) projectState.events = [];
   Object.values(projectState.voters).forEach((voter) => {
@@ -1095,6 +1211,7 @@ function buildReviewPayload(project, state, options = {}) {
   const productTag = voter?.productTag || normalizeProductTag(options.productTag);
   const images = filterReviewImagesByProduct(listReviewImages(project), projectState.imageProducts, productTag);
   const visibleVotes = filterReviewObjectByImages(projectState.votes, images);
+  const visibleDraftVotes = filterReviewObjectByImages(projectState.draftVotes, images);
   const visibleDescriptions = filterReviewObjectByImages(projectState.descriptions, images);
   return {
     ok: true,
@@ -1106,19 +1223,25 @@ function buildReviewPayload(project, state, options = {}) {
     imageProducts: projectState.imageProducts || {},
     projects: listReviewProjectInfos(state),
     images,
+    imageVersion: buildReviewImageVersion(project, images),
     updatedAt: projectState.updatedAt,
     voter,
     voters: Object.values(projectState.voters),
     summaries: buildVoteSummaries(visibleVotes),
     votes: visibleVotes,
     descriptions: visibleDescriptions,
-    currentVotes: buildCurrentVotes(visibleVotes, voterId),
+    currentVotes: buildCurrentVotes(visibleDraftVotes, voterId),
     recentEvents: (projectState.events || []).slice(-120).reverse(),
   };
 }
 
 function listReviewImages(project) {
-  const imagesDir = getReviewImagesDir(project);
+  const primaryImages = listReviewImageFiles(getReviewImagesDir(project));
+  if (primaryImages.length || HAS_EXTERNAL_REVIEW_IMAGES_DIR) return primaryImages;
+  return listReviewImageFiles(getLegacyReviewImagesDir(project));
+}
+
+function listReviewImageFiles(imagesDir) {
   if (!existsSync(imagesDir)) return [];
   try {
     return readdirSync(imagesDir)
@@ -1130,7 +1253,15 @@ function listReviewImages(project) {
 }
 
 function getReviewImagesDir(project) {
+  return resolve(PACKAGING_REVIEW_IMAGES_DIR, project);
+}
+
+function getLegacyReviewImagesDir(project) {
   return resolve(ROOT, "packaging-review", project, "images");
+}
+
+function getReviewPreviewDir(project) {
+  return resolve(PACKAGING_REVIEW_PREVIEW_DIR, project);
 }
 
 function ensureReviewImagesDir(project) {
@@ -1139,11 +1270,69 @@ function ensureReviewImagesDir(project) {
   return imagesDir;
 }
 
+function ensureReviewPreviewDir(project) {
+  const previewDir = getReviewPreviewDir(project);
+  mkdirSync(previewDir, { recursive: true });
+  return previewDir;
+}
+
 function getReviewImagePath(project, file) {
   const imagesDir = getReviewImagesDir(project);
   const imagePath = resolve(imagesDir, file);
   if (!imagePath.startsWith(imagesDir)) throw new Error("Invalid image path.");
   return imagePath;
+}
+
+function getReviewPreviewPath(project, file, extension = ".webp") {
+  const previewDir = getReviewPreviewDir(project);
+  const previewPath = resolve(previewDir, `${file}.preview${extension}`);
+  if (!previewPath.startsWith(previewDir)) throw new Error("Invalid preview path.");
+  return previewPath;
+}
+
+function resolveExistingReviewImagePath(project, file) {
+  const primaryPath = getReviewImagePath(project, file);
+  if (existsSync(primaryPath)) return primaryPath;
+  if (HAS_EXTERNAL_REVIEW_IMAGES_DIR) return primaryPath;
+
+  const legacyDir = getLegacyReviewImagesDir(project);
+  const legacyPath = resolve(legacyDir, file);
+  if (!legacyPath.startsWith(legacyDir)) throw new Error("Invalid image path.");
+  return legacyPath;
+}
+
+function findExistingReviewPreviewPath(project, file) {
+  for (const extension of [".webp", ".jpg", ".png", ".gif"]) {
+    const previewPath = getReviewPreviewPath(project, file, extension);
+    if (existsSync(previewPath)) return previewPath;
+  }
+  return "";
+}
+
+function resolveExistingReviewPreviewOrOriginalPath(project, file) {
+  return findExistingReviewPreviewPath(project, file) || resolveExistingReviewImagePath(project, file);
+}
+
+function removeReviewPreview(project, file) {
+  const previewPath = findExistingReviewPreviewPath(project, file);
+  if (previewPath && existsSync(previewPath)) unlinkSync(previewPath);
+}
+
+function writeReviewPreview(project, file, preview) {
+  removeReviewPreview(project, file);
+  ensureReviewPreviewDir(project);
+  const previewPath = getReviewPreviewPath(project, file, preview.ext);
+  const tempPath = `${previewPath}.${process.pid}.tmp`;
+  writeFileSync(tempPath, preview.buffer);
+  renameSync(tempPath, previewPath);
+}
+
+function renameReviewPreview(project, file, nextFile) {
+  const previewPath = findExistingReviewPreviewPath(project, file);
+  if (!previewPath) return;
+  removeReviewPreview(project, nextFile);
+  const nextPreviewPath = getReviewPreviewPath(project, nextFile, extname(previewPath).toLowerCase());
+  renameSync(previewPath, nextPreviewPath);
 }
 
 function createUniqueReviewImageName(imagesDir, requestedName) {
@@ -1179,6 +1368,13 @@ function parseReviewImageDataUrl(value) {
     return { ok: false, error: "图片格式校验失败。" };
   }
   return { ok: true, buffer, ext };
+}
+
+function parseOptionalReviewPreviewDataUrl(value) {
+  if (!String(value || "").trim()) return { ok: true, empty: true };
+  const preview = parseReviewImageDataUrl(value);
+  if (!preview.ok) return preview;
+  return { ...preview, empty: false };
 }
 
 function hasValidImageSignature(buffer, extension) {
@@ -1360,6 +1556,31 @@ async function serveStatic(pathname, req, res) {
     }
   }
 
+  const reviewImageMatch = pathname.match(/^\/packaging-review\/([a-z0-9][a-z0-9-]{0,80})\/images\/(.+)$/i);
+  if (reviewImageMatch) {
+    const project = normalizeReviewProject(reviewImageMatch[1]);
+    const file = normalizeReviewFile(decodeURIComponent(reviewImageMatch[2]));
+    if (!file) {
+      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end("Not found");
+      return;
+    }
+
+    const imageCandidates = [getReviewImagePath(project, file)];
+    if (!HAS_EXTERNAL_REVIEW_IMAGES_DIR) {
+      imageCandidates.push(resolve(getLegacyReviewImagesDir(project), file));
+    }
+    const existingImagePath = imageCandidates.find((candidate) => existsSync(candidate));
+    if (!existingImagePath) {
+      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end("Not found");
+      return;
+    }
+
+    await streamStaticFile(existingImagePath, req, res);
+    return;
+  }
+
   const requestPath = pathname === "/" ? "/index.html" : pathname;
   const safePath = normalize(decodeURIComponent(requestPath)).replace(/^(\.\.[/\\])+/, "");
   let filePath = resolve(join(ROOT, safePath));
@@ -1380,9 +1601,9 @@ async function serveStatic(pathname, req, res) {
   await streamStaticFile(filePath, req, res);
 }
 
-async function streamStaticFile(filePath, req, res) {
+async function streamStaticFile(filePath, req, res, headers = {}) {
   const type = MIME_TYPES[extname(filePath).toLowerCase()] || "application/octet-stream";
-  res.writeHead(200, { "Content-Type": type, "Cache-Control": "no-store" });
+  res.writeHead(200, { "Content-Type": type, "Cache-Control": "no-store", ...headers });
   if (req.method === "HEAD") {
     res.end();
     return;

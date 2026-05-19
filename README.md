@@ -48,6 +48,30 @@
       └─ images/
 ```
 
+## 生产环境数据隔离
+
+生产环境必须把运行数据放到独立目录，不能和代码目录混放，否则更新代码时会把线上新增图片一起覆盖。
+
+- 投票状态、日志、留言：`/var/lib/packaging-review/packaging-review-state.json`
+- 线上新增图片：`/var/lib/packaging-review/images/<project>/`
+- 压缩预览图：`/var/lib/packaging-review/previews/<project>/`
+- 代码目录：`/var/www/packaging-review`
+
+推荐 systemd 环境变量：
+
+```text
+PACKAGING_REVIEW_STATE_DIR=/var/lib/packaging-review
+PACKAGING_REVIEW_IMAGES_DIR=/var/lib/packaging-review/images
+PACKAGING_REVIEW_PREVIEW_DIR=/var/lib/packaging-review/previews
+```
+
+说明：
+
+- 仓库里的 `packaging-review/<project>/images/` 只作为样例素材或本地开发兜底目录。
+- 线上部署时，后续上传、替换、改名、删除都应只影响 `/var/lib/packaging-review/images/`。
+- 页面展示默认优先读取 `/var/lib/packaging-review/previews/` 下的压缩预览图，找不到预览时才回退原图。
+- 更新代码时只替换 `/var/www/packaging-review`，不要删除或覆盖 `/var/lib/packaging-review`。
+
 ## 本地运行
 
 本项目不需要数据库，直接用 Node.js 启动即可。

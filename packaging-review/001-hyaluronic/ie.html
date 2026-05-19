@@ -1,0 +1,790 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex,nofollow" />
+    <title>包装评审兼容版</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: "Microsoft YaHei", Arial, sans-serif;
+        background: #f6f3eb;
+        color: #222222;
+      }
+
+      body {
+        padding: 16px;
+      }
+
+      .page {
+        max-width: 1360px;
+        margin: 0 auto;
+      }
+
+      .header,
+      .panel,
+      .card {
+        border: 1px solid #d6d0c2;
+        background: #fffdf8;
+      }
+
+      .header {
+        padding: 16px 18px;
+      }
+
+      .header h1 {
+        margin: 0 0 8px;
+        font-size: 24px;
+        line-height: 1.2;
+      }
+
+      .subtext,
+      .meta-line,
+      .summary-line,
+      .card-summary,
+      .note-help {
+        color: #5f5a50;
+        font-size: 13px;
+        line-height: 1.6;
+      }
+
+      .subtext {
+        margin-top: 6px;
+      }
+
+      .panel {
+        margin-top: 14px;
+        padding: 14px 16px;
+      }
+
+      .toolbar {
+        margin-top: 12px;
+      }
+
+      .toolbar button {
+        margin: 0 8px 8px 0;
+      }
+
+      .button,
+      .mark-button {
+        display: inline-block;
+        min-width: 84px;
+        height: 34px;
+        padding: 0 14px;
+        border: 1px solid #c8c2b2;
+        background: #ffffff;
+        color: #1f1f1f;
+        font-size: 14px;
+        line-height: 32px;
+        text-align: center;
+        cursor: pointer;
+      }
+
+      .button:hover,
+      .mark-button:hover {
+        background: #f3ede0;
+      }
+
+      .button[disabled],
+      .mark-button[disabled] {
+        cursor: not-allowed;
+        color: #9f9f9f;
+        background: #f5f5f5;
+      }
+
+      .button-primary {
+        border-color: #0f766e;
+        background: #0f766e;
+        color: #ffffff;
+      }
+
+      .button-primary:hover {
+        background: #0b635d;
+      }
+
+      .mark-button-active-keep {
+        border-color: #0f766e;
+        background: #0f766e;
+        color: #ffffff;
+      }
+
+      .mark-button-active-hold {
+        border-color: #b45309;
+        background: #b45309;
+        color: #ffffff;
+      }
+
+      .mark-button-active-out {
+        border-color: #a33434;
+        background: #a33434;
+        color: #ffffff;
+      }
+
+      .status-error {
+        color: #a33434;
+        font-weight: bold;
+      }
+
+      .status-ok {
+        color: #0f766e;
+        font-weight: bold;
+      }
+
+      .cards {
+        margin-top: 14px;
+      }
+
+      .cards:after,
+      .toolbar:after,
+      .card-actions:after {
+        content: "";
+        display: table;
+        clear: both;
+      }
+
+      .card {
+        float: left;
+        width: 48.2%;
+        margin: 0 1.8% 14px 0;
+        padding: 12px;
+      }
+
+      .card-even {
+        margin-right: 0;
+      }
+
+      .card-title {
+        margin: 0 0 10px;
+        font-size: 16px;
+        line-height: 1.4;
+        word-break: break-all;
+      }
+
+      .card-image-wrap {
+        text-align: center;
+        background: #f6f1e5;
+        padding: 10px;
+      }
+
+      .card-image {
+        max-width: 100%;
+        border: 1px solid #d8d0c2;
+      }
+
+      .card-summary {
+        margin-top: 10px;
+      }
+
+      .card-actions {
+        margin-top: 10px;
+      }
+
+      .mark-button {
+        margin: 0 8px 8px 0;
+        min-width: 96px;
+        font-size: 20px;
+        font-weight: 700;
+      }
+
+      .note-row {
+        margin-top: 8px;
+      }
+
+      .note-input {
+        width: 100%;
+        height: 34px;
+        padding: 0 10px;
+        border: 1px solid #cbc5b8;
+        background: #ffffff;
+        font-size: 14px;
+        line-height: 34px;
+      }
+
+      .empty {
+        padding: 28px 16px;
+        border: 1px dashed #c7bfaf;
+        background: #fffdf8;
+        text-align: center;
+        color: #6c675e;
+      }
+
+      .link-line {
+        margin-top: 8px;
+        font-size: 13px;
+      }
+
+      .link-line a {
+        color: #0f766e;
+        text-decoration: none;
+      }
+
+      .link-line a:hover {
+        text-decoration: underline;
+      }
+
+      @media screen and (max-width: 900px) {
+        .card {
+          float: none;
+          width: auto;
+          margin-right: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="header">
+        <h1>包装评审兼容版</h1>
+        <div class="subtext">旧浏览器会自动进入这个页面。这里保留了看图、投票和提交确认，避免空白页。</div>
+        <div class="link-line">
+          现代浏览器可继续使用
+          <a id="modernLink" href="./">标准版页面</a>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="meta-line" id="projectInfo">项目：载入中</div>
+        <div class="meta-line" id="voterInfo">外发端：未识别</div>
+        <div class="summary-line" id="summaryInfo">统计：载入中</div>
+        <div class="summary-line" id="statusText">状态：正在连接服务器</div>
+        <div class="toolbar">
+          <button class="button" type="button" id="refreshBtn">刷新</button>
+          <button class="button" type="button" id="prevBtn">上一页</button>
+          <button class="button" type="button" id="nextBtn">下一页</button>
+          <button class="button button-primary" type="button" id="submitBtn">提交确认</button>
+          <span class="meta-line" id="pageInfo">页码：1 / 1</span>
+        </div>
+        <div class="note-help" id="helpText">提示：如果没有分发链接，本页只能查看汇总，不能投票。</div>
+      </div>
+
+      <div class="cards" id="cards"></div>
+      <div class="empty" id="emptyState" style="display: none;">当前没有可展示的图片。</div>
+    </div>
+
+    <script>
+      (function () {
+        var PAGE_SIZE = 4;
+        var params = parseQuery(window.location.search);
+        var projectId = projectFromPath() || "001-hyaluronic";
+        var voterId = params.voter || "";
+        var productTag = params.product || "";
+        var images = [];
+        var summaries = {};
+        var currentVotes = {};
+        var descriptions = {};
+        var voter = null;
+        var page = 0;
+        var imageVersion = "";
+        var markSymbols = { keep: "✓", hold: "?", out: "×" };
+
+        var cardsNode = document.getElementById("cards");
+        var emptyNode = document.getElementById("emptyState");
+        var projectInfoNode = document.getElementById("projectInfo");
+        var voterInfoNode = document.getElementById("voterInfo");
+        var summaryInfoNode = document.getElementById("summaryInfo");
+        var statusTextNode = document.getElementById("statusText");
+        var pageInfoNode = document.getElementById("pageInfo");
+        var helpTextNode = document.getElementById("helpText");
+        var refreshBtn = document.getElementById("refreshBtn");
+        var prevBtn = document.getElementById("prevBtn");
+        var nextBtn = document.getElementById("nextBtn");
+        var submitBtn = document.getElementById("submitBtn");
+        var modernLink = document.getElementById("modernLink");
+
+        modernLink.href = "./" + (window.location.search || "");
+
+        addEvent(refreshBtn, "click", function () {
+          loadState(false);
+        });
+        addEvent(prevBtn, "click", function () {
+          if (page > 0) {
+            page -= 1;
+            render();
+          }
+        });
+        addEvent(nextBtn, "click", function () {
+          if (page < totalPages() - 1) {
+            page += 1;
+            render();
+          }
+        });
+        addEvent(submitBtn, "click", function () {
+          submitCurrentVotes();
+        });
+
+        initializePage();
+
+        function parseQuery(search) {
+          var result = {};
+          var text = String(search || "");
+          if (text.charAt(0) === "?") text = text.slice(1);
+          if (!text) return result;
+          var pairs = text.split("&");
+          var i;
+          for (i = 0; i < pairs.length; i += 1) {
+            if (!pairs[i]) continue;
+            var part = pairs[i].split("=");
+            var key = safeDecode(part[0] || "");
+            if (!key) continue;
+            result[key] = safeDecode(part.slice(1).join("="));
+          }
+          return result;
+        }
+
+        function safeDecode(value) {
+          try {
+            return decodeURIComponent(String(value || "").replace(/\+/g, " "));
+          } catch (error) {
+            return String(value || "");
+          }
+        }
+
+        function projectFromPath() {
+          var match = window.location.pathname.match(/\/packaging-review\/([^/]+)\//);
+          return match && match[1] ? match[1] : "";
+        }
+
+        function buildStateUrl() {
+          var query = "project=" + encodeURIComponent(projectId) + "&_ts=" + String(new Date().getTime());
+          if (voterId) query += "&voter=" + encodeURIComponent(voterId);
+          if (productTag) query += "&product=" + encodeURIComponent(productTag);
+          return "/api/packaging-review/state?" + query;
+        }
+
+        function buildImageUrl(file) {
+          var url = "/api/packaging-review/image?project=" + encodeURIComponent(projectId) + "&file=" + encodeURIComponent(file) + "&variant=original";
+          if (imageVersion) url += "&v=" + encodeURIComponent(imageVersion);
+          return url;
+        }
+
+        function totalPages() {
+          return Math.max(1, Math.ceil(images.length / PAGE_SIZE));
+        }
+
+        function setStatus(text, isError) {
+          statusTextNode.innerHTML = "";
+          statusTextNode.appendChild(document.createTextNode("状态：" + text));
+          statusTextNode.className = isError ? "summary-line status-error" : "summary-line status-ok";
+        }
+
+        function loadState(silent) {
+          if (!silent) setStatus("正在同步数据", false);
+          requestJson("GET", buildStateUrl(), null, function (error, payload) {
+            if (error) {
+              setStatus(error, true);
+              return;
+            }
+            applyState(payload, silent ? shouldRenderCards(payload) : true);
+            setStatus("已同步 " + formatTime(new Date()), false);
+          });
+        }
+
+        function resetCurrentVoterSession(callback) {
+          if (!voterId) {
+            callback(false);
+            return;
+          }
+          setStatus("正在清空当前分发记录", false);
+          requestJson(
+            "POST",
+            "/api/packaging-review/voter-settings",
+            {
+              action: "reset-session",
+              project: projectId,
+              voter: voterId,
+              productTag: productTag,
+            },
+            function (error, payload) {
+              if (error) {
+                setStatus(error, true);
+                callback(false);
+                return;
+              }
+              applyState(payload, true);
+              setStatus("已清空当前分发记录", false);
+              callback(true);
+            },
+          );
+        }
+
+        function initializePage() {
+          if (voterId) {
+            resetCurrentVoterSession(function (resetApplied) {
+              if (!resetApplied) loadState(false);
+            });
+          } else {
+            loadState(false);
+          }
+          window.setInterval(function () {
+            loadState(true);
+          }, 15000);
+        }
+
+        function requestJson(method, url, body, callback) {
+          var xhr = new XMLHttpRequest();
+          xhr.open(method, url, true);
+          xhr.setRequestHeader("Cache-Control", "no-store");
+          if (body) xhr.setRequestHeader("Content-Type", "application/json");
+          xhr.onreadystatechange = function () {
+            if (xhr.readyState !== 4) return;
+            var payload = null;
+            try {
+              payload = xhr.responseText ? JSON.parse(xhr.responseText) : {};
+            } catch (error) {
+              callback("服务器返回解析失败");
+              return;
+            }
+            if (xhr.status < 200 || xhr.status >= 300 || !payload || payload.ok === false) {
+              callback((payload && payload.error) || ("HTTP " + xhr.status));
+              return;
+            }
+            callback(null, payload);
+          };
+          xhr.onerror = function () {
+            callback("连接服务器失败");
+          };
+          xhr.send(body ? JSON.stringify(body) : null);
+        }
+
+        function sameStringList(left, right) {
+          if (left === right) return true;
+          if (!left || !right || left.length !== right.length) return false;
+          var i;
+          for (i = 0; i < left.length; i += 1) {
+            if (left[i] !== right[i]) return false;
+          }
+          return true;
+        }
+
+        function currentPageFiles() {
+          var start = page * PAGE_SIZE;
+          var end = Math.min(images.length, start + PAGE_SIZE);
+          return images.slice(start, end);
+        }
+
+        function voteSignatureForFiles(files) {
+          var parts = [];
+          var i;
+          for (i = 0; i < files.length; i += 1) {
+            parts.push(files[i] + ":" + ((currentVotes[files[i]] && currentVotes[files[i]].mark) || "") + ":" + ((currentVotes[files[i]] && currentVotes[files[i]].note) || ""));
+          }
+          return parts.join("|");
+        }
+
+        function payloadVoteSignatureForFiles(files, payloadVotes) {
+          var parts = [];
+          var i;
+          for (i = 0; i < files.length; i += 1) {
+            parts.push(files[i] + ":" + (((payloadVotes[files[i]] && payloadVotes[files[i]].mark) || "")) + ":" + (((payloadVotes[files[i]] && payloadVotes[files[i]].note) || "")));
+          }
+          return parts.join("|");
+        }
+
+        function shouldRenderCards(payload) {
+          var nextImages = payload.images || [];
+          if (!sameStringList(images, nextImages)) return true;
+          if ((payload.imageVersion || "") !== imageVersion) return true;
+          if (Boolean(voter) !== Boolean(payload.voter)) return true;
+          if (((voter && voter.id) || "") !== (((payload.voter && payload.voter.id) || ""))) return true;
+          var files = currentPageFiles();
+          return voteSignatureForFiles(files) !== payloadVoteSignatureForFiles(files, payload.currentVotes || {});
+        }
+
+        function applyState(payload, shouldRender) {
+          images = payload.images || [];
+          summaries = payload.summaries || {};
+          currentVotes = payload.currentVotes || {};
+          descriptions = payload.descriptions || {};
+          voter = payload.voter || null;
+          imageVersion = payload.imageVersion || imageVersion;
+          if (page >= totalPages()) page = totalPages() - 1;
+          if (page < 0) page = 0;
+          renderMeta(payload);
+          if (shouldRender) render();
+        }
+
+        function renderMeta(payload) {
+          var summary = countTotals();
+          var projectName = payload.projectInfo && payload.projectInfo.name ? payload.projectInfo.name : projectId;
+          projectInfoNode.innerHTML = "";
+          projectInfoNode.appendChild(document.createTextNode("项目：" + projectName + "（" + projectId + "）"));
+
+          if (voter) {
+            var voterText = "外发端：" + (voter.name || voter.id || voterId);
+            if (voter.distributionStage) voterText += " / 阶段：" + voter.distributionStage;
+            if (voter.submitCount) voterText += " / 已提交：" + voter.submitCount + " 次";
+            voterInfoNode.innerHTML = "";
+            voterInfoNode.appendChild(document.createTextNode(voterText));
+            helpTextNode.innerHTML = "";
+            helpTextNode.appendChild(document.createTextNode("提示：兼容版当前只保留三项选择和提交确认。"));
+          } else if (voterId) {
+            voterInfoNode.innerHTML = "";
+            voterInfoNode.appendChild(document.createTextNode("外发端：当前链接无效，不能投票"));
+            helpTextNode.innerHTML = "";
+            helpTextNode.appendChild(document.createTextNode("提示：这个分发链接可能已失效，请让主持人重新生成。"));
+          } else {
+            voterInfoNode.innerHTML = "";
+            voterInfoNode.appendChild(document.createTextNode("外发端：主页面查看模式"));
+            helpTextNode.innerHTML = "";
+            helpTextNode.appendChild(document.createTextNode("提示：主页面只能看汇总，不能投票；请使用分发链接进入。"));
+          }
+
+          summaryInfoNode.innerHTML = "";
+          summaryInfoNode.appendChild(
+            document.createTextNode(
+              "统计：共 " +
+                images.length +
+                " 张，入选 " +
+                summary.keep +
+                "，待定 " +
+                summary.hold +
+                "，排除 " +
+                summary.out +
+                "，当前页每页 " +
+                PAGE_SIZE +
+                " 张",
+            ),
+          );
+
+          submitBtn.disabled = !canSubmit();
+        }
+
+        function countTotals() {
+          var total = { keep: 0, hold: 0, out: 0 };
+          var file;
+          for (file in summaries) {
+            if (!summaries.hasOwnProperty(file)) continue;
+            total.keep += Number(summaries[file].keep || 0);
+            total.hold += Number(summaries[file].hold || 0);
+            total.out += Number(summaries[file].out || 0);
+          }
+          return total;
+        }
+
+        function render() {
+          var start = page * PAGE_SIZE;
+          var end = Math.min(images.length, start + PAGE_SIZE);
+          pageInfoNode.innerHTML = "";
+          pageInfoNode.appendChild(document.createTextNode("页码：" + (page + 1) + " / " + totalPages()));
+          prevBtn.disabled = page <= 0;
+          nextBtn.disabled = page >= totalPages() - 1;
+
+          while (cardsNode.firstChild) cardsNode.removeChild(cardsNode.firstChild);
+
+          if (!images.length) {
+            emptyNode.style.display = "";
+            return;
+          }
+          emptyNode.style.display = "none";
+
+          var index;
+          for (index = start; index < end; index += 1) {
+            cardsNode.appendChild(buildCard(images[index], index));
+          }
+        }
+
+        function buildCard(file, index) {
+          var vote = currentVotes[file] || {};
+          var card = document.createElement("div");
+          card.className = "card" + (index % 2 === 1 ? " card-even" : "");
+
+          var title = document.createElement("h2");
+          title.className = "card-title";
+          title.appendChild(document.createTextNode("序号 " + padNumber(index + 1)));
+          card.appendChild(title);
+
+          var imageWrap = document.createElement("div");
+          imageWrap.className = "card-image-wrap";
+          var image = document.createElement("img");
+          image.className = "card-image";
+          image.alt = file;
+          image.src = buildImageUrl(file);
+          imageWrap.appendChild(image);
+          card.appendChild(imageWrap);
+
+          var actions = document.createElement("div");
+          actions.className = "card-actions";
+          actions.appendChild(buildMarkButton(file, "keep", vote.mark === "keep"));
+          actions.appendChild(buildMarkButton(file, "hold", vote.mark === "hold"));
+          actions.appendChild(buildMarkButton(file, "out", vote.mark === "out"));
+          card.appendChild(actions);
+
+          return card;
+        }
+
+        function buildMarkButton(file, mark, active) {
+          var button = document.createElement("button");
+          button.type = "button";
+          button.className = "mark-button" + (active ? " mark-button-active-" + mark : "");
+          button.disabled = !canVote();
+          button.appendChild(document.createTextNode(markSymbols[mark] || mark));
+          addEvent(button, "click", function () {
+            castVote(file, mark);
+          });
+          return button;
+        }
+
+        function castVote(file, mark) {
+          if (!canVote()) {
+            setStatus("当前链接不能投票", true);
+            return;
+          }
+          if (currentVotes[file] && currentVotes[file].mark === mark) {
+            clearVote(file);
+            return;
+          }
+          setStatus("正在保存投票", false);
+          requestJson(
+            "POST",
+            "/api/packaging-review/vote",
+            {
+              project: projectId,
+              voter: voterId,
+              file: file,
+              mark: mark,
+              note: currentVotes[file] && currentVotes[file].note ? currentVotes[file].note : "",
+              recordClick: true,
+            },
+            function (error, payload) {
+              if (error) {
+                setStatus(error, true);
+                return;
+              }
+              applyState(payload);
+              setStatus("投票已保存", false);
+            },
+          );
+        }
+
+        function clearVote(file) {
+          if (!canVote()) {
+            setStatus("当前链接不能投票", true);
+            return;
+          }
+          setStatus("正在清除选择", false);
+          requestJson(
+            "POST",
+            "/api/packaging-review/vote",
+            {
+              project: projectId,
+              voter: voterId,
+              file: file,
+              mark: "",
+              note: currentVotes[file] && currentVotes[file].note ? currentVotes[file].note : "",
+              recordClick: false,
+            },
+            function (error, payload) {
+              if (error) {
+                setStatus(error, true);
+                return;
+              }
+              applyState(payload);
+              setStatus("当前图片已清除", false);
+            },
+          );
+        }
+
+        function saveNote(file, value) {
+          if (!canVote()) return;
+          var nextNote = trimText(value).slice(0, 60);
+          var currentNote = currentVotes[file] && currentVotes[file].note ? currentVotes[file].note : "";
+          var currentMark = currentVotes[file] && currentVotes[file].mark ? currentVotes[file].mark : "";
+          if (nextNote === currentNote) return;
+          setStatus("正在保存备注", false);
+          requestJson(
+            "POST",
+            "/api/packaging-review/vote",
+            {
+              project: projectId,
+              voter: voterId,
+              file: file,
+              mark: currentMark,
+              note: nextNote,
+              recordClick: false,
+            },
+            function (error, payload) {
+              if (error) {
+                setStatus(error, true);
+                return;
+              }
+              applyState(payload);
+              setStatus("备注已保存", false);
+            },
+          );
+        }
+
+        function submitCurrentVotes() {
+          if (!canSubmit()) {
+            setStatus("当前链接不能提交确认", true);
+            return;
+          }
+          setStatus("正在提交确认", false);
+          requestJson(
+            "POST",
+            "/api/packaging-review/submit",
+            {
+              project: projectId,
+              voter: voterId,
+            },
+            function (error, payload) {
+              if (error) {
+                setStatus(error, true);
+                return;
+              }
+              applyState(payload);
+              setStatus("已提交确认", false);
+            },
+          );
+        }
+
+        function canVote() {
+          return !!(voterId && voter && voter.id);
+        }
+
+        function canSubmit() {
+          return canVote();
+        }
+
+        function markLabel(mark) {
+          if (mark === "keep") return "入选";
+          if (mark === "hold") return "待定";
+          if (mark === "out") return "排除";
+          return "未选择";
+        }
+
+        function trimText(value) {
+          return String(value || "").replace(/\s+/g, " ").replace(/^\s+|\s+$/g, "");
+        }
+
+        function padNumber(value) {
+          return value < 10 ? "0" + value : String(value);
+        }
+
+        function formatTime(date) {
+          return (
+            date.getFullYear() +
+            "-" +
+            padNumber(date.getMonth() + 1) +
+            "-" +
+            padNumber(date.getDate()) +
+            " " +
+            padNumber(date.getHours()) +
+            ":" +
+            padNumber(date.getMinutes()) +
+            ":" +
+            padNumber(date.getSeconds())
+          );
+        }
+
+        function addEvent(node, eventName, handler) {
+          if (node.addEventListener) node.addEventListener(eventName, handler, false);
+          else if (node.attachEvent) node.attachEvent("on" + eventName, handler);
+        }
+      })();
+    </script>
+  </body>
+</html>
