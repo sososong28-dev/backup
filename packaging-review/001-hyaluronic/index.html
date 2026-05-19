@@ -454,6 +454,19 @@
         gap: 4px;
       }
 
+      .actions.summary-actions .mark {
+        width: 100%;
+        min-width: 0;
+        padding: 0 5px;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .actions.summary-actions .mark:disabled {
+        cursor: default;
+        opacity: 1;
+      }
+
       .image-admin {
         grid-column: 1 / -1;
         display: grid;
@@ -1127,7 +1140,7 @@
       const submitUrl = "/api/packaging-review/submit";
       const descriptionUrl = "/api/packaging-review/description";
       const imageUrl = "/api/packaging-review/image";
-      const syncIntervalMs = 2500;
+      const syncIntervalMs = 1000;
       const labels = { keep: "入选", hold: "待定", out: "排除" };
       const actionLabels = {
         "create-voter": "新增外发端",
@@ -1165,6 +1178,7 @@
       let allEvents = [];
       let noteTimers = new Map();
       let descriptionTimers = new Map();
+      let voterUsageTimers = new Map();
       let imageCacheBust = "";
       let pendingReplaceFile = "";
       let lastTouchVoteAt = 0;
@@ -1444,11 +1458,17 @@
         return active?.classList?.contains("description-input") ? active.dataset.file || "" : "";
       }
 
+      function activeUsageVoterId() {
+        const active = document.activeElement;
+        return active?.classList?.contains("usage-input") ? active.dataset.voter || "" : "";
+      }
+
       function applyRemoteState(payload, shouldRender = true) {
         const focusedFile = activeNoteFile();
         const focusedValue = focusedFile ? document.activeElement.value : "";
         const focusedDescriptionFile = activeDescriptionFile();
         const focusedDescriptionValue = focusedDescriptionFile ? document.activeElement.value : "";
+        const focusedUsageVoterId = activeUsageVoterId();
         const nextMarks = {};
         const nextNotes = {};
         projectId = payload.project || projectId;
@@ -1477,10 +1497,11 @@
           render();
         } else {
           updateSummary();
+          refreshVisibleVoteSummaries();
         }
         syncHostControls();
         renderDecisionControls();
-        renderVoterPanel();
+        if (!focusedUsageVoterId) renderVoterPanel();
         renderLogs();
       }
 
@@ -1933,6 +1954,8 @@
           const limit = usageLimitValue(voter);
           input.value = limit === null ? "" : String(limit);
           input.dataset.voter = voter.id;
+          input.addEventListener("input", () => queueVoterUsageSync(voter.id, input.value));
+          input.addEventListener("blur", () => flushVoterUsageSync(voter.id, input.value));
 
           const save = document.createElement("button");
           save.className = "button text";
@@ -1971,6 +1994,8 @@
 
       async function updateVoterUsage(rowVoterId, value) {
         try {
+          window.clearTimeout(voterUsageTimers.get(rowVoterId));
+          voterUsageTimers.delete(rowVoterId);
           setSyncLabel("保存使用次数中");
           const response = await fetch(voterSettingsUrl, {
             method: "POST",
@@ -1989,6 +2014,22 @@
         } catch (error) {
           setSyncLabel(error.message || "保存失败", true);
         }
+      }
+
+      function queueVoterUsageSync(rowVoterId, value) {
+        if (!canManageImages()) return;
+        window.clearTimeout(voterUsageTimers.get(rowVoterId));
+        voterUsageTimers.set(
+          rowVoterId,
+          window.setTimeout(() => {
+            updateVoterUsage(rowVoterId, value);
+          }, 650),
+        );
+      }
+
+      function flushVoterUsageSync(rowVoterId, value) {
+        if (!canManageImages() || !voterUsageTimers.has(rowVoterId)) return;
+        updateVoterUsage(rowVoterId, value);
       }
 
       async function deleteVoter(rowVoterId, name) {
@@ -2014,6 +2055,20 @@
         } catch (error) {
           setSyncLabel(error.message || "删除失败", true);
         }
+      }
+
+      function refreshVisibleVoteSummaries() {
+        document.querySelectorAll("[data-summary-file][data-summary-mark]").forEach((button) => {
+          const file = button.dataset.summaryFile || "";
+          const mark = button.dataset.summaryMark || "";
+          const summary = summaries[file] || {};
+          const title = button.getAttribute("aria-label") || labels[mark] || mark;
+          if (canManageImages()) button.textContent = `${title} ${summary[mark] || 0}`;
+        });
+        document.querySelectorAll("[data-vote-summary-file]").forEach((node) => {
+          const summary = summaries[node.dataset.voteSummaryFile || ""] || {};
+          node.innerHTML = `<span>入选 ${summary.keep || 0}</span><span>待定 ${summary.hold || 0}</span><span>排除 ${summary.out || 0}</span>`;
+        });
       }
 
       function render() {
@@ -2067,7 +2122,7 @@
           filename.textContent = item.file;
 
           const actions = document.createElement("div");
-          actions.className = "actions";
+          actions.className = `actions${canManageImages() ? " summary-actions" : ""}`;
 
           [
             ["keep", "✓", "入选"],
@@ -2079,7 +2134,9 @@
             button.type = "button";
             button.title = title;
             button.setAttribute("aria-label", title);
-            button.textContent = isMobileViewport() ? title : text;
+            button.dataset.summaryFile = item.file;
+            button.dataset.summaryMark = value;
+            button.textContent = canManageImages() ? `${title} ${summary[value] || 0}` : isMobileViewport() ? title : text;
             button.disabled = !canClickVote;
             button.addEventListener("pointerup", (event) => handleMarkPointer(event, item.file, value));
             button.addEventListener("click", (event) => handleMarkClick(event, item.file, value));
@@ -2143,6 +2200,7 @@
 
           const voteSummary = document.createElement("div");
           voteSummary.className = "vote-summary";
+          voteSummary.dataset.voteSummaryFile = item.file;
           voteSummary.innerHTML = `<span>入选 ${summary.keep || 0}</span><span>待定 ${summary.hold || 0}</span><span>排除 ${summary.out || 0}</span>`;
 
           let descriptionNode;
