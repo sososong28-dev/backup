@@ -212,6 +212,30 @@
         padding-inline: 10px;
       }
 
+      .sortbox {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        padding-inline: 10px;
+      }
+
+      .sortbox label {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .sortbox select {
+        min-width: 0;
+        border: 0;
+        outline: 0;
+        color: var(--ink);
+        background: transparent;
+        font: inherit;
+      }
+
       .searchbox input {
         width: 100%;
         min-width: 0;
@@ -504,6 +528,21 @@
         color: var(--out);
       }
 
+      .visibility-actions {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 4px;
+      }
+
+      .visibility-actions .button {
+        width: 100%;
+        height: 28px;
+        min-width: 0;
+        border: 1px solid var(--line);
+        background: #ffffff;
+        font-size: 12px;
+      }
+
       .vote-summary {
         grid-column: 1 / -1;
         display: flex;
@@ -522,6 +561,22 @@
         border-radius: 6px;
         padding: 0 7px;
         background: rgba(255, 255, 255, 0.74);
+      }
+
+      .vote-summary.compact {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 4px;
+        margin-top: -2px;
+        font-size: 11px;
+      }
+
+      .vote-summary.compact span {
+        justify-content: center;
+        height: 16px;
+        border: 0;
+        padding: 0;
+        background: transparent;
       }
 
       .image-description {
@@ -728,6 +783,37 @@
         min-height: 0;
         overflow: auto;
         padding: 10px 12px 16px;
+      }
+
+      .voter-stage-group {
+        padding-bottom: 8px;
+      }
+
+      .voter-stage-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 10px 0 6px;
+      }
+
+      .voter-stage-head strong {
+        font-size: 15px;
+        line-height: 1.3;
+      }
+
+      .voter-stage-head span {
+        color: var(--muted);
+        font-size: 12px;
+        white-space: nowrap;
+      }
+
+      .voter-stage-empty {
+        padding: 10px 0 14px;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.5;
       }
 
       .voter-row {
@@ -1134,11 +1220,21 @@
           <div class="searchbox">
             <input id="searchInput" type="search" placeholder="搜索文件名/留言" autocomplete="off" />
           </div>
+          <div class="segmented sortbox host-only" id="sortBox" aria-label="图片排序">
+            <label for="sortSelect">排序</label>
+            <select id="sortSelect">
+              <option value="default">默认顺序</option>
+              <option value="keep-desc">最多喜欢</option>
+              <option value="hold-desc">最多 hold</option>
+              <option value="out-desc">最多不喜欢</option>
+            </select>
+          </div>
           <div class="segmented" role="tablist" aria-label="结果筛选">
             <button class="button text active" type="button" data-filter="all">全部</button>
             <button class="button text" type="button" data-filter="keep">入选</button>
             <button class="button text" type="button" data-filter="hold">待定</button>
             <button class="button text" type="button" data-filter="out">排除</button>
+            <button class="button text host-only is-hidden" type="button" id="hiddenFilterBtn" data-filter="hidden">隐藏</button>
           </div>
           <div class="segmented layout-toggle" role="tablist" aria-label="页面布局">
             <button class="button text" type="button" data-layout="1x2">1×2</button>
@@ -1319,10 +1415,15 @@
         "image-rename": "修改图片",
         "image-delete": "删除图片",
       };
+      actionLabels["image-hide"] = "隐藏图片";
+      actionLabels["image-restore"] = "还原图片";
+
       let voterId = urlParams.get("voter") || "";
       let page = 0;
       let filter = "all";
+      let sortMode = "default";
       let searchText = "";
+      let hiddenImageFiles = [];
       let marks = {};
       let notes = {};
       let descriptions = {};
@@ -1352,6 +1453,9 @@
       const pageLabel = document.querySelector("#pageLabel");
       const pageSizeLabel = document.querySelector("#pageSizeLabel");
       const searchInput = document.querySelector("#searchInput");
+      const sortBox = document.querySelector("#sortBox");
+      const sortSelect = document.querySelector("#sortSelect");
+      const hiddenFilterBtn = document.querySelector("#hiddenFilterBtn");
       const decisionPanel = document.querySelector("#decisionPanel");
       const projectSearchInput = document.querySelector("#projectSearchInput");
       const projectSelect = document.querySelector("#projectSelect");
@@ -1534,14 +1638,32 @@
         return `第${names[index - 1] || index}次分发`;
       }
 
-      function buildStageSummaries(votes, stage = currentDistributionStage) {
-        const voterMap = new Map(voters.map((voter) => [voter.id, voter]));
+      function voteEntryVoterId(rowVoteId, vote) {
+        return normalizeVoterId((vote && vote.voterId) || rowVoteId || "");
+      }
+
+      function voteEntryStage(rowVoteId, vote) {
+        return (
+          normalizeDistributionStage((vote && vote.distributionStage) || "") ||
+          normalizeDistributionStage((voterById(voteEntryVoterId(rowVoteId, vote)) || {}).distributionStage) ||
+          ""
+        );
+      }
+
+      function voteEntryMatchesStage(rowVoteId, vote, stage = currentDistributionStage) {
         const target = normalizeDistributionStage(stage);
+        return !target || voteEntryStage(rowVoteId, vote) === target;
+      }
+
+      function voteEntryName(rowVoteId, vote) {
+        return ((vote && vote.voterName) || voterName(voteEntryVoterId(rowVoteId, vote)) || rowVoteId || "").trim();
+      }
+
+      function buildStageSummaries(votes, stage = currentDistributionStage) {
         return Object.entries(votes || {}).reduce((next, [file, byVoter]) => {
           const summary = { keep: 0, hold: 0, out: 0, total: 0 };
-          Object.entries(byVoter || {}).forEach(([rowVoterId, vote]) => {
-            const voter = voterMap.get(rowVoterId);
-            if (target && !stageMatchesVoter(voter, target)) return;
+          Object.entries(byVoter || {}).forEach(([rowVoteId, vote]) => {
+            if (!voteEntryMatchesStage(rowVoteId, vote, stage)) return;
             const mark = vote.mark || "";
             if (!summary[mark] && summary[mark] !== 0) return;
             summary[mark] += 1;
@@ -1553,19 +1675,30 @@
       }
 
       function syncHostControls() {
-        addImageBtn.classList.toggle("is-hidden", !canManageImages());
-        voterSettingsBtn.classList.toggle("is-hidden", !canManageImages());
-        decisionPanel.classList.toggle("is-hidden", !canManageImages());
+        const canManage = canManageImages();
+        if (!canManage && filter === "hidden") {
+          filter = "all";
+          page = 0;
+        }
+        addImageBtn.classList.toggle("is-hidden", !canManage);
+        voterSettingsBtn.classList.toggle("is-hidden", !canManage);
+        decisionPanel.classList.toggle("is-hidden", !canManage);
+        sortBox.classList.toggle("is-hidden", !canManage);
+        hiddenFilterBtn.classList.toggle("is-hidden", !canManage);
+        hiddenFilterBtn.textContent = hiddenImageFiles.length ? `隐藏 ${hiddenImageFiles.length}` : "隐藏";
+        syncFilterButtons();
         submitConfirmBtn.classList.toggle("is-hidden", !canSubmitConfirm());
+      }
+
+      function syncFilterButtons() {
+        document.querySelectorAll("[data-filter]").forEach((item) => {
+          item.classList.toggle("active", item.dataset.filter === filter);
+        });
       }
 
       function mergeRemoteImages(remoteImages) {
         if (!Array.isArray(remoteImages)) return;
-        const remoteSet = new Set(remoteImages);
-        images = images.filter((file) => remoteSet.has(file));
-        remoteImages.forEach((file) => {
-          if (!images.includes(file)) images.push(file);
-        });
+        images = remoteImages.slice();
       }
 
       function sameStringList(left, right) {
@@ -1603,12 +1736,14 @@
       }
 
       function getFilteredImages() {
-        return images
+        return activeImagePool()
           .map((file, index) => ({ file, index }))
           .filter((item) => {
             const summary = summaries[item.file] || {};
             const matchesFilter =
-              filter === "all" || (hasValidVoter() ? marks[item.file] === filter : Number(summary[filter] || 0) > 0);
+              isHiddenFilterActive() ||
+              filter === "all" ||
+              (hasValidVoter() ? marks[item.file] === filter : Number(summary[filter] || 0) > 0);
             const note = notes[item.file] || "";
             const description = descriptions[item.file] || "";
             const productName = productNameForFile(item.file).toLowerCase();
@@ -1618,7 +1753,36 @@
               description.toLowerCase().includes(searchText) ||
               productName.includes(searchText);
             return matchesFilter && matchesSearch;
-          });
+          })
+          .sort((left, right) => compareImageOrder(left, right));
+      }
+
+      function compareImageOrder(left, right) {
+        if (sortMode === "default") return left.index - right.index;
+        const leftSummary = summaries[left.file] || {};
+        const rightSummary = summaries[right.file] || {};
+        const metric =
+          sortMode === "keep-desc"
+            ? "keep"
+            : sortMode === "hold-desc"
+              ? "hold"
+              : sortMode === "out-desc"
+                ? "out"
+                : "";
+        if (!metric) return left.index - right.index;
+        const diff = Number(rightSummary[metric] || 0) - Number(leftSummary[metric] || 0);
+        if (diff !== 0) return diff;
+        const totalDiff = Number(rightSummary.total || 0) - Number(leftSummary.total || 0);
+        if (totalDiff !== 0) return totalDiff;
+        return left.index - right.index;
+      }
+
+      function isHiddenFilterActive() {
+        return canManageImages() && filter === "hidden";
+      }
+
+      function activeImagePool() {
+        return isHiddenFilterActive() ? hiddenImageFiles : images;
       }
 
       function updateSummary() {
@@ -1631,8 +1795,10 @@
           },
           { keep: 0, hold: 0, out: 0 },
         );
-        countLabel.textContent = `${projectInfo.name || projectId} / ${currentProductTag || "全部产品"} / ${selectedStageLabel()} / 共 ${images.length} 张`;
-        resultLabel.textContent = `入选 ${totals.keep} / 待定 ${totals.hold} / 排除 ${totals.out}`;
+        countLabel.textContent = `${projectInfo.name || projectId} / ${currentProductTag || "全部产品"} / ${selectedStageLabel()} / 共 ${activeImagePool().length} 张`;
+        resultLabel.textContent = isHiddenFilterActive()
+          ? `已隐藏 ${hiddenImageFiles.length} / 可在隐藏标签还原`
+          : `入选 ${totals.keep} / 待定 ${totals.hold} / 排除 ${totals.out}`;
         voterLabel.textContent = currentVoter ? `当前：${currentVoter.name}` : voterId ? "分发链接无效" : "主页面";
         usageLabel.textContent = currentVoter ? usageText(currentVoter) : "使用次数：主页面设置";
         usageLabel.classList.toggle("sync-state", Boolean(currentVoter));
@@ -1748,6 +1914,7 @@
         distributionStages = Array.isArray(payload.distributionStages) ? payload.distributionStages.map(normalizeDistributionStage).filter(Boolean) : distributionStages;
         imageProducts = payload.imageProducts || {};
         mergeRemoteImages(payload.images || []);
+        hiddenImageFiles = Array.isArray(payload.hiddenImages) ? payload.hiddenImages : [];
         allVotes = payload.votes || {};
         descriptions = payload.descriptions || {};
         voters = Array.isArray(payload.voters) ? payload.voters : [];
@@ -2070,6 +2237,7 @@
           const payload = await response.json().catch(() => ({}));
           if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
           applyRemoteState(payload, true);
+          window.alert("提交成功");
           closeSubmitModal();
           setSyncLabel("已提交确认");
         } catch (error) {
@@ -2160,6 +2328,22 @@
           setSyncLabel("图片已删除");
         } catch (error) {
           setSyncLabel(error.message || "删除图片失败", true);
+        }
+      }
+
+      async function setImageHidden(file, hidden) {
+        if (!canManageImages() || !file) return;
+        try {
+          setSyncLabel(hidden ? "隐藏图片中..." : "还原图片中...");
+          const payload = await sendImageRequest({
+            action: hidden ? "hide" : "restore",
+            file,
+          });
+          allEvents = [];
+          applyRemoteState(payload, true);
+          setSyncLabel(hidden ? "图片已隐藏" : "图片已还原");
+        } catch (error) {
+          setSyncLabel(error.message || (hidden ? "隐藏图片失败" : "还原图片失败"), true);
         }
       }
 
@@ -2322,9 +2506,14 @@
         await loadRemoteState({ silent: true });
       }
 
+      function distributionStagesForPanel() {
+        return [...new Set([...distributionStages, ...stageNamesFromVoters()].map(normalizeDistributionStage).filter(Boolean))];
+      }
+
       function renderVoterPanel() {
         if (!voterPanel.classList.contains("open")) return;
-        if (!voters.length) {
+        const stages = distributionStagesForPanel();
+        if (!stages.length && !voters.length) {
           voterList.innerHTML = '<div class="log-row"><span class="muted">暂无分发端</span></div>';
           return;
         }
@@ -2387,6 +2576,27 @@
           row.append(main, stageInput, input, save, copy, remove);
           voterList.append(row);
         });
+        stages
+          .filter((stageName) => !voters.some((voter) => voterStage(voter) === stageName))
+          .forEach((stageName) => {
+            const group = document.createElement("section");
+            group.className = "voter-stage-group";
+
+            const header = document.createElement("div");
+            header.className = "voter-stage-head";
+            const title = document.createElement("strong");
+            title.textContent = stageName;
+            const meta = document.createElement("span");
+            meta.textContent = "暂无外发端";
+            header.append(title, meta);
+
+            const emptyRow = document.createElement("div");
+            emptyRow.className = "voter-stage-empty";
+            emptyRow.textContent = "当前阶段已经创建，但暂时还没有外发端。可点击顶部“新增外发端”为这个阶段新建。";
+
+            group.append(header, emptyRow);
+            voterList.append(group);
+          });
       }
 
       function buildVoterShareLink(rowVoterId) {
@@ -2492,7 +2702,9 @@
         });
         document.querySelectorAll("[data-vote-summary-file]").forEach((node) => {
           const summary = summaries[node.dataset.voteSummaryFile || ""] || {};
-          node.innerHTML = `<span>入选 ${summary.keep || 0}</span><span>待定 ${summary.hold || 0}</span><span>排除 ${summary.out || 0}</span>`;
+          node.innerHTML = node.classList.contains("compact")
+            ? `<span>${summary.keep || 0}</span><span>${summary.hold || 0}</span><span>${summary.out || 0}</span>`
+            : `<span>入选 ${summary.keep || 0}</span><span>待定 ${summary.hold || 0}</span><span>排除 ${summary.out || 0}</span>`;
         });
         if (imagePreviewFile && imageModal.classList.contains("open")) {
           const summary = summaries[imagePreviewFile] || {};
@@ -2630,9 +2842,25 @@
           }
 
           const voteSummary = document.createElement("div");
-          voteSummary.className = "vote-summary";
+          voteSummary.className = `vote-summary${canManageImages() ? " compact" : ""}`;
           voteSummary.dataset.voteSummaryFile = item.file;
-          voteSummary.innerHTML = `<span>入选 ${summary.keep || 0}</span><span>待定 ${summary.hold || 0}</span><span>排除 ${summary.out || 0}</span>`;
+          voteSummary.innerHTML = canManageImages()
+            ? `<span>${summary.keep || 0}</span><span>${summary.hold || 0}</span><span>${summary.out || 0}</span>`
+            : `<span>入选 ${summary.keep || 0}</span><span>待定 ${summary.hold || 0}</span><span>排除 ${summary.out || 0}</span>`;
+
+          const visibilityActions = document.createElement("div");
+          visibilityActions.className = "visibility-actions";
+          if (canManageImages()) {
+            const visibilityButton = document.createElement("button");
+            visibilityButton.className = "button text";
+            visibilityButton.type = "button";
+            visibilityButton.textContent = isHiddenFilterActive() ? "还原" : "隐藏";
+            visibilityButton.addEventListener("click", (event) => {
+              event.stopPropagation();
+              setImageHidden(item.file, !isHiddenFilterActive());
+            });
+            visibilityActions.append(visibilityButton);
+          }
 
           let descriptionNode;
           if (canManageImages()) {
@@ -2676,14 +2904,15 @@
           details.className = "tile-details";
           details.append(filename);
           if (canManageImages()) details.append(imageAdmin);
-          details.append(productNode, descriptionNode, voteSummary, noteInput);
+          details.append(productNode, descriptionNode, noteInput);
 
           imageWrap.addEventListener("click", (event) => {
             event.stopPropagation();
             openImagePreview(item);
           });
 
-          caption.append(actions, details);
+          if (canManageImages()) caption.append(actions, voteSummary, visibilityActions, details);
+          else caption.append(actions, details);
           tile.append(imageWrap, number, status, caption);
           stage.append(tile);
         });
@@ -2850,16 +3079,15 @@
       function buildVoteDetailRows() {
         const rows = [];
         images.forEach((file, index) => {
-          Object.entries(allVotes[file] || {}).forEach(([rowVoterId, vote]) => {
-            const voter = voterById(rowVoterId);
-            if (!stageMatchesVoter(voter)) return;
+          Object.entries(allVotes[file] || {}).forEach(([rowVoteId, vote]) => {
+            if (!voteEntryMatchesStage(rowVoteId, vote)) return;
             rows.push([
               String(index + 1).padStart(2, "0"),
               file,
               productNameForFile(file),
-              voterStage(voter),
+              voteEntryStage(rowVoteId, vote),
               descriptions[file] || "",
-              voterName(rowVoterId),
+              voteEntryName(rowVoteId, vote),
               labels[vote.mark] || "",
               vote.note || "",
               vote.updatedAt || "",
@@ -2890,26 +3118,28 @@
 
       function voterNamesByMark(file, mark) {
         return Object.entries(allVotes[file] || {})
-          .filter(([rowVoterId, vote]) => vote.mark === mark && stageMatchesVoter(voterById(rowVoterId)))
-          .map(([rowVoterId]) => voterName(rowVoterId))
+          .filter(([rowVoteId, vote]) => vote.mark === mark && voteEntryMatchesStage(rowVoteId, vote))
+          .map(([rowVoteId, vote]) => voteEntryName(rowVoteId, vote))
           .join("；");
       }
 
       function notesForFile(file) {
         return Object.entries(allVotes[file] || {})
-          .filter(([rowVoterId, vote]) => vote.note && stageMatchesVoter(voterById(rowVoterId)))
-          .map(([rowVoterId, vote]) => `${voterName(rowVoterId)}：${vote.note}`)
+          .filter(([rowVoteId, vote]) => vote.note && voteEntryMatchesStage(rowVoteId, vote))
+          .map(([rowVoteId, vote]) => `${voteEntryName(rowVoteId, vote)}：${vote.note}`)
           .join("；");
       }
 
       function countVotesForVoter(rowVoterId) {
         return images.reduce(
           (counts, file) => {
-            const vote = allVotes[file] && allVotes[file][rowVoterId];
-            if (!vote) return counts;
-            const mark = vote.mark || "";
-            if (counts[mark] !== undefined) counts[mark] += 1;
-            if (vote.note) counts.notes += 1;
+            Object.entries(allVotes[file] || {}).forEach(([rowVoteId, vote]) => {
+              if (voteEntryVoterId(rowVoteId, vote) !== rowVoterId) return;
+              if (!voteEntryMatchesStage(rowVoteId, vote)) return;
+              const mark = vote.mark || "";
+              if (counts[mark] !== undefined) counts[mark] += 1;
+              if (vote.note) counts.notes += 1;
+            });
             return counts;
           },
           { keep: 0, hold: 0, out: 0, notes: 0 },
@@ -2974,10 +3204,10 @@
 
       document.querySelectorAll("[data-filter]").forEach((button) => {
         button.addEventListener("click", () => {
-          document.querySelectorAll("[data-filter]").forEach((item) => item.classList.remove("active"));
-          button.classList.add("active");
+          if (button.dataset.filter === "hidden" && !canManageImages()) return;
           filter = button.dataset.filter;
           page = 0;
+          syncFilterButtons();
           render();
         });
       });
@@ -2988,6 +3218,12 @@
 
       searchInput.addEventListener("input", () => {
         searchText = searchInput.value.trim().toLowerCase();
+        page = 0;
+        render();
+      });
+
+      sortSelect.addEventListener("change", () => {
+        sortMode = sortSelect.value || "default";
         page = 0;
         render();
       });

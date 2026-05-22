@@ -589,16 +589,23 @@ async function handlePackagingReviewSubmit(req, res) {
   }
 
   const now = new Date().toISOString();
-  removeReviewVoterVotes(projectState.votes, voterId);
+  const nextSubmitCount = Math.max(0, Math.floor(Number(voter.submitCount || 0))) + 1;
+  const submissionId = buildReviewSubmissionId(voterId, nextSubmitCount, now);
   Object.entries(projectState.draftVotes || {}).forEach(([file, byVoter]) => {
     if (!byVoter || !byVoter[voterId]) return;
     if (!projectState.votes[file]) projectState.votes[file] = {};
-    projectState.votes[file][voterId] = {
+    projectState.votes[file][submissionId] = {
       ...byVoter[voterId],
+      voterId,
+      voterName: voter.name,
+      distributionStage: voter.distributionStage,
+      submitCount: nextSubmitCount,
+      submissionId,
+      submittedAt: now,
       updatedAt: now,
     };
   });
-  voter.submitCount = Math.max(0, Math.floor(Number(voter.submitCount || 0))) + 1;
+  voter.submitCount = nextSubmitCount;
   voter.submittedAt = now;
   voter.updatedAt = now;
   projectState.updatedAt = now;
@@ -678,6 +685,14 @@ async function handlePackagingReviewImage(req, res) {
   }
   if (action === "rename") {
     handlePackagingReviewImageRename(project, body, res);
+    return;
+  }
+  if (action === "hide") {
+    handlePackagingReviewImageVisibility(project, body, res, true);
+    return;
+  }
+  if (action === "restore") {
+    handlePackagingReviewImageVisibility(project, body, res, false);
     return;
   }
   if (action === "delete") {
@@ -839,12 +854,56 @@ function handlePackagingReviewImageRename(project, body, res) {
     projectState.imageProducts[nextFile] = projectState.imageProducts[file];
     delete projectState.imageProducts[file];
   }
+  if (projectState.hiddenImages[file]) {
+    projectState.hiddenImages[nextFile] = projectState.hiddenImages[file];
+    delete projectState.hiddenImages[file];
+  }
   projectState.updatedAt = new Date().toISOString();
   appendReviewEvent(projectState, {
     action: "image-rename",
     file,
     nextFile,
     note: "修改图片名称",
+  });
+  writePackagingReviewState(state);
+  sendJson(res, 200, buildReviewPayload(project, state, { productTag }));
+}
+
+function handlePackagingReviewImageVisibility(project, body, res, hidden) {
+  const productTag = normalizeProductTag(body.productTag || body.product);
+  const file = normalizeReviewFile(body.file);
+  if (!file) {
+    sendJson(res, 400, { ok: false, error: "Invalid file." });
+    return;
+  }
+  const imagePath = resolveExistingReviewImagePath(project, file);
+  if (!existsSync(imagePath)) {
+    sendJson(res, 404, { ok: false, error: "Image not found." });
+    return;
+  }
+
+  const state = readPackagingReviewState();
+  const projectState = getReviewProjectState(state, project);
+  const now = new Date().toISOString();
+  const alreadyHidden = Boolean(projectState.hiddenImages[file]);
+  if (hidden === alreadyHidden) {
+    sendJson(res, 200, buildReviewPayload(project, state, { productTag }));
+    return;
+  }
+
+  if (hidden) {
+    projectState.hiddenImages[file] = {
+      hiddenAt: now,
+      updatedAt: now,
+    };
+  } else {
+    delete projectState.hiddenImages[file];
+  }
+  projectState.updatedAt = now;
+  appendReviewEvent(projectState, {
+    action: hidden ? "image-hide" : "image-restore",
+    file,
+    note: hidden ? "隐藏图片" : "还原图片",
   });
   writePackagingReviewState(state);
   sendJson(res, 200, buildReviewPayload(project, state, { productTag }));
@@ -872,6 +931,7 @@ function handlePackagingReviewImageDelete(project, body, res) {
   delete projectState.draftVotes[file];
   delete projectState.descriptions[file];
   delete projectState.imageProducts[file];
+  delete projectState.hiddenImages[file];
   projectState.updatedAt = new Date().toISOString();
   appendReviewEvent(projectState, {
     action: "image-delete",
@@ -985,14 +1045,25 @@ function isUsageLimitReached(voter) {
 function removeReviewVoterVotes(votesByFile, voterId) {
   let removedVotes = 0;
   Object.keys(votesByFile || {}).forEach((file) => {
-    if (!votesByFile[file]?.[voterId]) return;
-    delete votesByFile[file][voterId];
-    removedVotes += 1;
+    const byVote = votesByFile[file];
+    if (!byVote || typeof byVote !== "object") return;
+    Object.keys(byVote).forEach((voteKey) => {
+      if (!reviewVoteBelongsToVoter(voteKey, byVote[voteKey], voterId)) return;
+      delete byVote[voteKey];
+      removedVotes += 1;
+    });
     if (Object.keys(votesByFile[file]).length === 0) {
       delete votesByFile[file];
     }
   });
   return removedVotes;
+}
+
+function reviewVoteBelongsToVoter(voteKey, vote, voterId) {
+  const normalizedVoterId = normalizeVoterId(voterId);
+  if (!normalizedVoterId) return false;
+  const voteOwnerId = normalizeVoterId(vote?.voterId || voteKey);
+  return voteOwnerId === normalizedVoterId;
 }
 
 function resetReviewVoterSession(projectState, voterId) {
@@ -1026,6 +1097,16 @@ function createReviewId() {
   return randomBytes(8).toString("hex");
 }
 
+function buildReviewSubmissionId(voterId, submitCount, submittedAt = "", fallbackKey = "") {
+  const normalizedVoterId = normalizeVoterId(voterId) || normalizeVoterId(fallbackKey) || createReviewId();
+  const normalizedSubmitCount = Math.max(1, Math.floor(Number(submitCount || 1)));
+  const compactTime = String(submittedAt || "")
+    .replace(/[^0-9]/g, "")
+    .slice(0, 14);
+  const suffix = compactTime || createReviewId();
+  return `submission-${normalizedVoterId}-${normalizedSubmitCount}-${suffix}`;
+}
+
 function readPackagingReviewState() {
   try {
     if (!existsSync(PACKAGING_REVIEW_STATE_FILE)) return { projects: {} };
@@ -1052,6 +1133,7 @@ function getReviewProjectState(state, project) {
       productTags: defaultReviewProductTags(project),
       distributionStages: [],
       imageProducts: {},
+      hiddenImages: {},
       voters: {},
       votes: {},
       draftVotes: {},
@@ -1069,6 +1151,7 @@ function getReviewProjectState(state, project) {
   projectState.productTags = [...new Set(projectState.productTags.map(normalizeProductTag).filter(Boolean))].slice(0, 80);
   if (!Array.isArray(projectState.distributionStages)) projectState.distributionStages = [];
   if (!projectState.imageProducts || typeof projectState.imageProducts !== "object") projectState.imageProducts = {};
+  if (!projectState.hiddenImages || typeof projectState.hiddenImages !== "object") projectState.hiddenImages = {};
   if (!projectState.voters || typeof projectState.voters !== "object") projectState.voters = {};
   if (!projectState.votes || typeof projectState.votes !== "object") projectState.votes = {};
   if (!projectState.draftVotes || typeof projectState.draftVotes !== "object") projectState.draftVotes = {};
@@ -1082,6 +1165,39 @@ function getReviewProjectState(state, project) {
     voter.productTag = normalizeProductTag(voter.productTag);
     voter.distributionStage = normalizeDistributionStage(voter.distributionStage) || "第一次分发";
     addReviewDistributionStage(projectState, voter.distributionStage);
+  });
+  Object.entries(projectState.votes).forEach(([file, byVote]) => {
+    if (!byVote || typeof byVote !== "object") {
+      delete projectState.votes[file];
+      return;
+    }
+    Object.entries(byVote).forEach(([voteKey, vote]) => {
+      if (!vote || typeof vote !== "object") {
+        delete byVote[voteKey];
+        return;
+      }
+      const voteVoterId = normalizeVoterId(vote.voterId || voteKey);
+      const linkedVoter = voteVoterId ? projectState.voters[voteVoterId] || null : null;
+      if (voteVoterId) vote.voterId = voteVoterId;
+      vote.voterName = compactText(vote.voterName || linkedVoter?.name).slice(0, 40);
+      vote.distributionStage =
+        normalizeDistributionStage(vote.distributionStage) ||
+        normalizeDistributionStage(linkedVoter?.distributionStage) ||
+        "绗竴娆″垎鍙?";
+      vote.submittedAt =
+        typeof vote.submittedAt === "string" && vote.submittedAt
+          ? vote.submittedAt
+          : linkedVoter?.submittedAt || vote.updatedAt || projectState.updatedAt || new Date().toISOString();
+      vote.submitCount = Math.max(0, Math.floor(Number(vote.submitCount || linkedVoter?.submitCount || 0)));
+      vote.submissionId =
+        compactText(vote.submissionId).slice(0, 120) ||
+        buildReviewSubmissionId(vote.voterId, vote.submitCount || 1, vote.submittedAt, voteKey);
+      vote.updatedAt = typeof vote.updatedAt === "string" && vote.updatedAt ? vote.updatedAt : vote.submittedAt;
+      addReviewDistributionStage(projectState, vote.distributionStage);
+    });
+    if (Object.keys(byVote).length === 0) {
+      delete projectState.votes[file];
+    }
   });
   projectState.distributionStages = [...new Set(projectState.distributionStages.map(normalizeDistributionStage).filter(Boolean))].slice(0, 80);
 
@@ -1196,6 +1312,16 @@ function filterReviewImagesByProduct(images, imageProducts, productTag) {
   return images.filter((file) => imageProducts?.[file] === tag);
 }
 
+function splitHiddenReviewImages(images, hiddenImages) {
+  const hiddenSet = new Set(
+    Object.keys(hiddenImages || {}).filter((file) => images.includes(file)),
+  );
+  return {
+    visibleImages: images.filter((file) => !hiddenSet.has(file)),
+    hiddenImageList: images.filter((file) => hiddenSet.has(file)),
+  };
+}
+
 function filterReviewObjectByImages(source, images) {
   const allowed = new Set(images);
   return Object.entries(source || {}).reduce((next, [file, value]) => {
@@ -1209,7 +1335,8 @@ function buildReviewPayload(project, state, options = {}) {
   const voterId = normalizeVoterId(options.voterId);
   const voter = voterId && projectState.voters[voterId] ? projectState.voters[voterId] : null;
   const productTag = voter?.productTag || normalizeProductTag(options.productTag);
-  const images = filterReviewImagesByProduct(listReviewImages(project), projectState.imageProducts, productTag);
+  const productImages = filterReviewImagesByProduct(listReviewImages(project), projectState.imageProducts, productTag);
+  const { visibleImages: images, hiddenImageList } = splitHiddenReviewImages(productImages, projectState.hiddenImages);
   const visibleVotes = filterReviewObjectByImages(projectState.votes, images);
   const visibleDraftVotes = filterReviewObjectByImages(projectState.draftVotes, images);
   const visibleDescriptions = filterReviewObjectByImages(projectState.descriptions, images);
@@ -1221,6 +1348,7 @@ function buildReviewPayload(project, state, options = {}) {
     productTags: projectState.productTags || [],
     distributionStages: projectState.distributionStages || [],
     imageProducts: projectState.imageProducts || {},
+    hiddenImages: hiddenImageList,
     projects: listReviewProjectInfos(state),
     images,
     imageVersion: buildReviewImageVersion(project, images),
@@ -1246,7 +1374,14 @@ function listReviewImageFiles(imagesDir) {
   try {
     return readdirSync(imagesDir)
       .filter((name) => /\.(png|jpe?g|webp|gif|svg)$/i.test(name))
-      .sort((left, right) => left.localeCompare(right, "zh-CN"));
+      .sort((left, right) => {
+        const leftPath = resolve(imagesDir, left);
+        const rightPath = resolve(imagesDir, right);
+        const leftTime = existsSync(leftPath) ? Number(statSync(leftPath).mtimeMs || 0) : 0;
+        const rightTime = existsSync(rightPath) ? Number(statSync(rightPath).mtimeMs || 0) : 0;
+        if (rightTime !== leftTime) return rightTime - leftTime;
+        return left.localeCompare(right, "zh-CN");
+      });
   } catch {
     return [];
   }
