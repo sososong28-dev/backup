@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex,nofollow" />
+    <meta name="theme-color" content="#07100c" />
+    <title>SharkCoach 德州扑克训练模式</title>
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="stylesheet" href="./styles.css?v=11" />
+  </head>
+  <body>
+    <section id="homeScreen" class="home-screen">
+      <div class="home-shell">
+        <div class="home-copy">
+          <p class="home-kicker">训练模式</p>
+          <h1>SharkCoach 德州扑克训练台</h1>
+          <p class="home-subtitle">
+            横屏单屏牌桌，按德州扑克规则逐位行动。左侧专注牌局，右侧实时指导；题库和定制牌局拆成独立模块。
+          </p>
+          <div class="home-actions">
+            <button id="startTrainingBtn" class="button primary home-start" type="button">开始训练</button>
+            <button id="openQuestionBankHomeBtn" class="button secondary home-start" type="button">题库</button>
+            <button id="openCustomHomeBtn" class="button secondary home-start" type="button">定制牌局</button>
+            <a class="button secondary home-start" href="./lan.html">本地联机</a>
+            <span>最多 5 人桌 | 顺序行动 | 数据只保存在当前浏览器</span>
+          </div>
+        </div>
+
+        <div class="home-table-preview" aria-hidden="true">
+          <div class="preview-seat preview-seat-top">对手回合</div>
+          <div class="preview-board">
+            <span>A</span>
+            <span>K</span>
+            <span>Q</span>
+          </div>
+          <div class="preview-seat preview-seat-active">你的决策</div>
+        </div>
+
+        <div class="home-feature-grid">
+          <div>
+            <strong>横屏实战台</strong>
+            <span>游玩页固定为单屏，牌桌和指导并排展示，不再上下翻动。</span>
+          </div>
+          <div>
+            <strong>独立题库</strong>
+            <span>题型选择、答题反馈和错题本集中到题库模块。</span>
+          </div>
+          <div>
+            <strong>定制牌局</strong>
+            <span>人数、手牌、公共牌、底池和跟注额集中到定制模块。</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <main id="gameScreen" class="app-shell is-hidden">
+      <div class="landscape-hint" role="status">
+        <strong>请横屏使用训练台</strong>
+        <span>当前游玩页采用左牌桌、右指导的横屏单屏布局。</span>
+      </div>
+
+      <header class="topbar">
+        <div class="brand-lockup">
+          <div class="brand-mark" aria-hidden="true">S</div>
+          <div>
+            <p class="eyebrow">训练模式</p>
+            <h1>德州扑克实战训练</h1>
+          </div>
+        </div>
+
+        <div class="top-actions">
+          <label class="style-select">
+            <span class="label">风格</span>
+            <select id="modeSelect" aria-label="训练风格">
+              <option value="balanced">平衡</option>
+              <option value="tight">稳健</option>
+              <option value="aggressive">激进</option>
+            </select>
+          </label>
+          <button id="newHandBtn" class="button primary" type="button">新牌局</button>
+          <button id="openQuestionBankBtn" class="button secondary" type="button">题库</button>
+          <button id="openCustomHandBtn" class="button secondary" type="button">定制</button>
+          <a class="button secondary" href="./lan.html">联机</a>
+          <button id="logoutBtn" class="button" type="button">退出</button>
+        </div>
+      </header>
+
+      <div class="game-layout">
+        <section class="table-zone" aria-label="牌桌区域">
+          <div class="round-strip">
+            <div>
+              <span class="label">当前街</span>
+              <strong id="streetLabel">翻前</strong>
+            </div>
+            <div>
+              <span class="label">底池</span>
+              <strong id="potLabel">0 BB</strong>
+            </div>
+            <div>
+              <span class="label">需跟注</span>
+              <strong id="callLabel">0 BB</strong>
+            </div>
+            <div>
+              <span class="label">牌局号</span>
+              <strong id="handNumberLabel">#1</strong>
+            </div>
+          </div>
+
+          <section class="poker-table" aria-label="德州扑克桌">
+            <div id="opponentSeats" class="opponent-grid"></div>
+
+            <div class="felt-center">
+              <div class="pot-chip">
+                <span>底池</span>
+                <strong id="centerPotLabel">0 BB</strong>
+              </div>
+              <div id="boardCards" class="card-row board-row" aria-label="公共牌"></div>
+            </div>
+
+            <article id="heroSeat" class="hero-seat">
+              <div class="seat-copy">
+                <span class="position-pill">Hero</span>
+                <strong>你的手牌</strong>
+                <small id="heroHandName">等待发牌</small>
+                <small id="heroStack">200 BB 记分</small>
+              </div>
+              <div id="heroCards" class="card-row" aria-label="你的手牌"></div>
+            </article>
+          </section>
+
+          <div class="control-dock" aria-label="操作区">
+            <button id="checkCallBtn" class="button secondary" type="button">过牌</button>
+            <button id="betRaiseBtn" class="button action" type="button">下注</button>
+            <button id="foldBtn" class="button ghost" type="button">弃牌</button>
+            <button id="nextStreetBtn" class="button" type="button">下一街</button>
+            <button id="allInBtn" class="button danger" type="button">全下</button>
+            <div class="raise-control">
+              <span>下注</span>
+              <input id="raiseSlider" type="range" min="2" max="24" value="6" />
+              <strong id="raiseAmount">6 BB</strong>
+            </div>
+          </div>
+        </section>
+
+        <aside class="coach-panel" aria-label="实时指导">
+          <section class="coach-card headline-card">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">实时指导</p>
+                <h2 id="recommendationTitle">等待开局</h2>
+              </div>
+              <span id="confidenceBadge" class="confidence-badge">准备中</span>
+            </div>
+            <p id="recommendationText">
+              点击“新牌局”开始训练，系统会根据街次、底池赔率、牌面结构和题型方向给出建议。
+            </p>
+
+            <div class="equity-meter">
+              <div id="equityBar" class="equity-fill"></div>
+            </div>
+
+            <div class="metric-row">
+              <div>
+                <span>胜率</span>
+                <strong id="equityValue">--</strong>
+              </div>
+              <div>
+                <span>底池赔率</span>
+                <strong id="potOddsValue">--</strong>
+              </div>
+              <div>
+                <span>在局对手</span>
+                <strong id="activeOpponentsValue">0</strong>
+              </div>
+            </div>
+
+            <div class="scenario-mini">
+              <div>
+                <span id="scenarioDifficulty" class="score-pill">基础</span>
+                <strong id="scenarioTitle">标准随机局</strong>
+              </div>
+              <p id="scenarioObjective">按正常牌局节奏训练范围、位置和下注尺度。</p>
+              <small id="scenarioFocus">常规训练</small>
+              <small id="scenarioDirection">没有固定标准答案，重点看过程质量。</small>
+              <small id="scenarioReviewPrompt">回看你是否根据位置、赔率和公共牌变化不断调整计划。</small>
+            </div>
+
+            <div id="analysisChips" class="chip-list"></div>
+          </section>
+
+          <section class="coach-card analysis-card">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">牌局分析</p>
+                <h2>当前节点</h2>
+              </div>
+              <span id="equityMethodBadge" class="score-pill">自动</span>
+            </div>
+
+            <div class="analysis-grid">
+              <div>
+                <span>当前成牌</span>
+                <strong id="madeHandLabel">等待发牌</strong>
+              </div>
+              <div>
+                <span>改良张数</span>
+                <strong id="outsLabel">--</strong>
+              </div>
+              <div>
+                <span>牌面结构</span>
+                <strong id="boardTextureLabel">--</strong>
+              </div>
+              <div>
+                <span>建议尺度</span>
+                <strong id="sizingLabel">--</strong>
+              </div>
+              <div class="wide">
+                <span>湿度评级</span>
+                <strong id="textureScore">--</strong>
+              </div>
+            </div>
+
+            <ul id="reasonList" class="reason-list"></ul>
+            <div id="completeStats" class="complete-stats"></div>
+          </section>
+
+          <section class="coach-card ai-card">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">AI 教练</p>
+                <h2>百炼分析</h2>
+              </div>
+              <button id="askAiCoachBtn" class="mini-button" type="button">分析</button>
+            </div>
+            <span id="aiCoachStatus" class="ai-status">可选填 API Key，也可以只使用本地训练建议。</span>
+            <div id="aiCoachResult" class="ai-coach-result" hidden></div>
+            <details class="api-key-panel">
+              <summary>API Key 设置</summary>
+              <label>
+                <span class="label">百炼 API Key</span>
+                <input
+                  id="bailianApiKeyInput"
+                  type="password"
+                  placeholder="仅保存在当前浏览器"
+                  autocomplete="off"
+                />
+              </label>
+              <div class="api-key-actions">
+                <button id="saveApiKeyBtn" class="mini-button" type="button">保存 Key</button>
+                <button id="clearApiKeyBtn" class="mini-button" type="button">清除 Key</button>
+              </div>
+              <small id="apiKeyHint">未填写时默认使用本地规则分析。</small>
+            </details>
+          </section>
+        </aside>
+      </div>
+
+      <section id="modulePanel" class="module-panel" hidden aria-label="训练模块">
+        <div class="module-shell">
+          <header class="module-header">
+            <div>
+              <p class="eyebrow">训练模块</p>
+              <h2 id="moduleTitle">题库</h2>
+            </div>
+            <button id="closeModuleBtn" class="button" type="button">返回牌桌</button>
+          </header>
+
+          <div id="questionBankModule" class="module-view" data-module-view="question">
+            <section class="coach-card">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">题库</p>
+                  <h2>选择题型</h2>
+                </div>
+                <button id="startScenarioBtn" class="button primary" type="button">开始该题</button>
+              </div>
+              <div class="tool-grid module-controls">
+                <label>
+                  <span class="label">训练题型</span>
+                  <select id="scenarioTemplateSelect"></select>
+                </label>
+                <label>
+                  <span class="label">胜率模式</span>
+                  <select id="equityModeSelect">
+                    <option value="auto">自动</option>
+                    <option value="exact">精确枚举</option>
+                    <option value="simulation">模拟</option>
+                  </select>
+                </label>
+              </div>
+            </section>
+
+            <section class="coach-card">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">答题反馈</p>
+                  <h2 id="answerVerdict">等待答题</h2>
+                </div>
+                <span id="answerScore" class="score-pill">待评分</span>
+              </div>
+
+              <div class="analysis-grid">
+                <div class="wide">
+                  <span>你的动作</span>
+                  <strong id="answerAction">尚未作答</strong>
+                </div>
+              </div>
+
+              <p id="answerSummary" class="answer-summary">
+                当你做出本手第一次决策后，这里会显示评分、结论和复盘方向。
+              </p>
+              <div id="retryComparison" class="retry-comparison" hidden>
+                <strong id="retryComparisonTitle"></strong>
+                <p id="retryComparisonSummary"></p>
+              </div>
+              <ul id="answerReasons" class="reason-list"></ul>
+            </section>
+
+            <section class="coach-card">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">错题本</p>
+                  <h2>高频偏差</h2>
+                </div>
+                <div class="mistake-header-actions">
+                  <button id="retryLatestMistakeBtn" class="mini-button" type="button">重练最新</button>
+                  <button id="clearMistakesBtn" class="mini-button" type="button">清空</button>
+                </div>
+              </div>
+              <div class="mistake-toolbar">
+                <label>
+                  <span class="label">题型筛选</span>
+                  <select id="mistakeScenarioFilter"></select>
+                </label>
+                <label>
+                  <span class="label">分数筛选</span>
+                  <select id="mistakeScoreFilter"></select>
+                </label>
+              </div>
+              <p id="mistakeBookSummary" class="section-summary">暂无记录</p>
+              <p id="mistakeStatsSummary" class="section-summary">继续做题后，这里会总结你最常出现的偏差。</p>
+              <div id="mistakeStatsDetails" class="chip-list mistake-stats"></div>
+              <div id="mistakeBookList" class="mistake-list"></div>
+            </section>
+
+            <section class="coach-card">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">训练记录</p>
+                  <h2>行动日志</h2>
+                </div>
+                <button id="clearLogBtn" class="mini-button" type="button">清空</button>
+              </div>
+              <ol id="actionLog" class="action-log"></ol>
+            </section>
+          </div>
+
+          <div id="customHandModule" class="module-view" data-module-view="custom" hidden>
+            <section class="coach-card">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">定制牌局</p>
+                  <h2>构建训练节点</h2>
+                </div>
+              </div>
+
+              <div class="tool-grid">
+                <label>
+                  <span class="label">牌桌人数</span>
+                  <select id="playerCountSelect"></select>
+                </label>
+                <label>
+                  <span class="label">底池</span>
+                  <input id="scenarioPotInput" type="number" min="0" step="1" value="0" />
+                </label>
+                <label>
+                  <span class="label">需跟注</span>
+                  <input id="scenarioCallInput" type="number" min="0" step="1" value="0" />
+                </label>
+              </div>
+
+              <div id="scenarioCards" class="scenario-grid"></div>
+
+              <div class="tool-actions">
+                <button id="applyScenarioBtn" class="button secondary" type="button">应用场景</button>
+                <button id="runToRiverBtn" class="button action" type="button">按顺序推进</button>
+                <button id="resetScenarioBtn" class="button ghost" type="button">重开一手</button>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="./vendor/pokersolver.js"></script>
+    <script type="module" src="./app.js?v=11"></script>
+  </body>
+</html>

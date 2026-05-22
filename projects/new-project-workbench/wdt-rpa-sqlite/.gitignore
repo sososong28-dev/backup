@@ -1,0 +1,13 @@
+data/*.sqlite
+data/*.sqlite-*
+logs/*.log
+exports/inbox/*
+exports/archive/*
+exports/error/*
+!exports/inbox/.gitkeep
+!exports/archive/.gitkeep
+!exports/error/.gitkeep
+config/config.json
+__pycache__/
+*.pyc
+

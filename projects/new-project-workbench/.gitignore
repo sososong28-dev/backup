@@ -1,0 +1,37 @@
+# Local runtime and generated artifacts
+.codex_tmp/
+.playwright-cli/
+output/
+scratch/
+tmp-*/
+data/
+logs/
+test-results/
+*.log
+*.tmp
+
+# Dependency and build folders
+node_modules/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+dist/
+build/
+coverage/
+
+# Local secrets and credentials
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Uploaded as its own GitHub repository
+github-packaging-review/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db

@@ -1,0 +1,27 @@
+﻿{
+    "generatedAt":  "2026-05-22T22:19:41.3010295+08:00",
+    "source":  "C:\\Users\\ho\\Documents\\New project",
+    "destinationRepository":  "sososong28-dev/backup",
+    "layout":  [
+                   {
+                       "rule":  "root git-unignored files",
+                       "path":  "projects/new-project-workbench",
+                       "source":  "C:\\Users\\ho\\Documents\\New project"
+                   },
+                   {
+                       "rule":  "tracked files from independent git repository",
+                       "path":  "projects/github-packaging-review",
+                       "source":  "C:\\Users\\ho\\Documents\\New project\\github-packaging-review"
+                   }
+               ],
+    "excluded":  [
+                     ".codex_tmp/",
+                     ".playwright-cli/",
+                     "output/",
+                     "scratch/",
+                     "tmp-*",
+                     "data/",
+                     "logs/",
+                     "test-results/"
+                 ]
+}

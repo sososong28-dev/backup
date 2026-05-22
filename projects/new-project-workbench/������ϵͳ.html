@@ -1,0 +1,2595 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex,nofollow" />
+    <title>大象考勤系统</title>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family:
+          Inter, "Segoe UI", "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
+        --bg: #f6f8fb;
+        --panel: #ffffff;
+        --ink: #172033;
+        --muted: #667085;
+        --line: #d8dee8;
+        --line-strong: #bdc6d4;
+        --teal: #0f766e;
+        --teal-dark: #0b5f59;
+        --blue: #2563eb;
+        --amber: #b45309;
+        --red: #b42318;
+        --green: #15803d;
+        --soft-teal: #e7f5f3;
+        --soft-blue: #eaf1ff;
+        --soft-amber: #fff4df;
+        --soft-red: #fdecec;
+        --shadow: 0 16px 38px rgba(29, 41, 57, 0.08);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        color: var(--ink);
+        background: var(--bg);
+      }
+
+      button,
+      input,
+      select {
+        font: inherit;
+      }
+
+      button,
+      .file-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-height: 36px;
+        padding: 8px 12px;
+        border: 1px solid var(--line-strong);
+        border-radius: 7px;
+        color: var(--ink);
+        background: #fff;
+        cursor: pointer;
+        transition:
+          border-color 0.16s ease,
+          background 0.16s ease,
+          color 0.16s ease,
+          transform 0.16s ease;
+      }
+
+      button:hover,
+      .file-button:hover {
+        border-color: var(--teal);
+        color: var(--teal);
+      }
+
+      button:active,
+      .file-button:active {
+        transform: translateY(1px);
+      }
+
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.45;
+      }
+
+      .primary {
+        border-color: var(--teal);
+        color: #fff;
+        background: var(--teal);
+      }
+
+      .primary:hover {
+        border-color: var(--teal-dark);
+        color: #fff;
+        background: var(--teal-dark);
+      }
+
+      .file-button input {
+        display: none;
+      }
+
+      .icon {
+        width: 16px;
+        height: 16px;
+        stroke-width: 2;
+      }
+
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        padding: 16px 24px;
+        border-bottom: 1px solid var(--line);
+        background: rgba(246, 248, 251, 0.94);
+        backdrop-filter: blur(10px);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+      }
+
+      .brand-mark {
+        display: grid;
+        width: 42px;
+        height: 42px;
+        flex: 0 0 42px;
+        place-items: center;
+        border: 1px solid rgba(15, 118, 110, 0.35);
+        border-radius: 8px;
+        color: var(--teal);
+        background: var(--soft-teal);
+        font-weight: 800;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: 1.16rem;
+        letter-spacing: 0;
+      }
+
+      .period {
+        margin-top: 3px;
+        color: var(--muted);
+        font-size: 0.88rem;
+      }
+
+      .actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+
+      .app {
+        display: grid;
+        gap: 16px;
+        width: min(1440px, calc(100% - 32px));
+        margin: 18px auto 28px;
+      }
+
+      .toolbar,
+      .panel,
+      .kpi-card {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        box-shadow: var(--shadow);
+      }
+
+      .toolbar {
+        display: grid;
+        grid-template-columns: minmax(220px, 1fr) minmax(220px, 300px) auto auto minmax(260px, auto);
+        gap: 12px;
+        align-items: center;
+        padding: 14px;
+      }
+
+      .searchbox {
+        position: relative;
+      }
+
+      .searchbox .icon {
+        position: absolute;
+        top: 50%;
+        left: 12px;
+        color: var(--muted);
+        transform: translateY(-50%);
+      }
+
+      .searchbox input {
+        width: 100%;
+        min-height: 40px;
+        padding: 9px 12px 9px 38px;
+        border: 1px solid var(--line-strong);
+        border-radius: 7px;
+        outline: none;
+        background: #fff;
+      }
+
+      .searchbox input:focus {
+        border-color: var(--teal);
+        box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+      }
+
+      .selectbox {
+        position: relative;
+      }
+
+      .selectbox .icon {
+        position: absolute;
+        top: 50%;
+        left: 12px;
+        pointer-events: none;
+        color: var(--muted);
+        transform: translateY(-50%);
+      }
+
+      .selectbox select {
+        width: 100%;
+        min-height: 40px;
+        padding: 9px 36px 9px 38px;
+        border: 1px solid var(--line-strong);
+        border-radius: 7px;
+        outline: none;
+        color: var(--ink);
+        background: #fff;
+      }
+
+      .selectbox select:focus {
+        border-color: var(--teal);
+        box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+      }
+
+      .setting {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--muted);
+        font-size: 0.9rem;
+        white-space: nowrap;
+      }
+
+      .setting input {
+        width: 16px;
+        height: 16px;
+        accent-color: var(--teal);
+      }
+
+      .fixed-days-control {
+        display: inline-flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 8px;
+        min-width: 0;
+      }
+
+      .fixed-days-control label {
+        color: var(--muted);
+        font-size: 0.9rem;
+        white-space: nowrap;
+      }
+
+      .fixed-days-control input {
+        width: 92px;
+        min-height: 40px;
+        padding: 9px 10px;
+        border: 1px solid var(--line-strong);
+        border-radius: 7px;
+        outline: none;
+        background: #fff;
+      }
+
+      .fixed-days-control input:focus {
+        border-color: var(--teal);
+        box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+      }
+
+      .kpis {
+        display: grid;
+        grid-template-columns: repeat(8, minmax(124px, 1fr));
+        gap: 12px;
+      }
+
+      .kpi-card {
+        min-height: 90px;
+        padding: 14px;
+      }
+
+      .kpi-label {
+        color: var(--muted);
+        font-size: 0.78rem;
+      }
+
+      .kpi-value {
+        margin-top: 8px;
+        font-size: 1.42rem;
+        font-weight: 760;
+      }
+
+      .kpi-note {
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 0.76rem;
+      }
+
+      .rules-panel {
+        overflow: hidden;
+      }
+
+      .rules-body {
+        padding: 14px 16px 16px;
+      }
+
+      .rules-list {
+        margin: 0;
+        padding-left: 22px;
+        columns: 2;
+        column-gap: 32px;
+        color: #344054;
+        font-size: 0.84rem;
+        line-height: 1.58;
+      }
+
+      .rules-list li {
+        break-inside: avoid;
+        margin: 0 0 5px;
+        padding-left: 2px;
+      }
+
+      .content {
+        display: grid;
+        grid-template-columns: minmax(0, 1.24fr) minmax(360px, 0.76fr);
+        gap: 16px;
+        align-items: start;
+      }
+
+      .panel {
+        overflow: hidden;
+      }
+
+      .panel-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .panel-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.96rem;
+        font-weight: 760;
+      }
+
+      .panel-meta {
+        color: var(--muted);
+        font-size: 0.82rem;
+        white-space: nowrap;
+      }
+
+      .table-wrap {
+        overflow: auto;
+        max-height: min(62dvh, 720px);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        font-size: 0.88rem;
+      }
+
+      thead th {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        border-bottom: 1px solid var(--line);
+        color: #344054;
+        background: #f9fafc;
+        font-weight: 720;
+      }
+
+      th,
+      td {
+        padding: 10px 12px;
+        border-bottom: 1px solid #edf0f5;
+        text-align: left;
+        vertical-align: middle;
+        white-space: nowrap;
+      }
+
+      tbody tr {
+        cursor: pointer;
+      }
+
+      tbody tr:hover {
+        background: #f7fbfb;
+      }
+
+      tbody tr.selected {
+        background: var(--soft-teal);
+      }
+
+      .num {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .name-cell {
+        font-weight: 700;
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        min-height: 24px;
+        padding: 3px 8px;
+        border: 1px solid transparent;
+        border-radius: 999px;
+        font-size: 0.78rem;
+        font-weight: 720;
+        white-space: nowrap;
+      }
+
+      .badge.good {
+        border-color: #b7e4c7;
+        color: var(--green);
+        background: #edf9f0;
+      }
+
+      .badge.warn {
+        border-color: #f6d49a;
+        color: var(--amber);
+        background: var(--soft-amber);
+      }
+
+      .badge.bad {
+        border-color: #f7b4b4;
+        color: var(--red);
+        background: var(--soft-red);
+      }
+
+      .badge.info {
+        border-color: #b6caf8;
+        color: var(--blue);
+        background: var(--soft-blue);
+      }
+
+      .detail-body {
+        display: grid;
+        gap: 14px;
+        padding: 14px 16px 16px;
+      }
+
+      .selected-title {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .selected-name {
+        font-size: 1.08rem;
+        font-weight: 800;
+      }
+
+      .selected-sub {
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 0.84rem;
+        line-height: 1.4;
+      }
+
+      .mini-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+      }
+
+      .mini {
+        min-height: 64px;
+        padding: 10px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: #fbfcfe;
+      }
+
+      .mini span {
+        display: block;
+        color: var(--muted);
+        font-size: 0.72rem;
+      }
+
+      .mini strong {
+        display: block;
+        margin-top: 6px;
+        font-size: 1rem;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .detail-section-title {
+        margin-top: 12px;
+        margin-bottom: -2px;
+        color: var(--muted);
+        font-size: 0.78rem;
+        font-weight: 800;
+      }
+
+      .notes {
+        min-height: 42px;
+        padding: 10px 12px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        color: #344054;
+        background: #fbfcfe;
+        font-size: 0.84rem;
+        line-height: 1.55;
+      }
+
+      .day-list {
+        max-height: 330px;
+        overflow: auto;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+      }
+
+      .day-table th,
+      .day-table td {
+        padding: 8px 10px;
+        font-size: 0.8rem;
+      }
+
+      .empty {
+        display: grid;
+        min-height: 340px;
+        place-items: center;
+        padding: 28px;
+        color: var(--muted);
+        text-align: center;
+      }
+
+      .empty strong {
+        display: block;
+        margin-bottom: 6px;
+        color: var(--ink);
+        font-size: 1rem;
+      }
+
+      .statusbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        color: var(--muted);
+        font-size: 0.82rem;
+      }
+
+      .toast {
+        position: fixed;
+        right: 18px;
+        bottom: 18px;
+        z-index: 40;
+        display: none;
+        max-width: min(420px, calc(100vw - 36px));
+        padding: 12px 14px;
+        border: 1px solid var(--line-strong);
+        border-radius: 8px;
+        color: var(--ink);
+        background: #fff;
+        box-shadow: var(--shadow);
+      }
+
+      .toast.show {
+        display: block;
+      }
+
+      @media (max-width: 1180px) {
+        .kpis {
+          grid-template-columns: repeat(4, 1fr);
+        }
+
+        .content {
+          grid-template-columns: 1fr;
+        }
+
+        .table-wrap {
+          max-height: none;
+        }
+      }
+
+      @media (max-width: 720px) {
+        .topbar {
+          position: static;
+          align-items: stretch;
+          flex-direction: column;
+          padding: 14px;
+        }
+
+        .actions {
+          justify-content: stretch;
+        }
+
+        .actions button,
+        .actions .file-button {
+          flex: 1;
+        }
+
+        .app {
+          width: min(100% - 20px, 1440px);
+          margin-top: 12px;
+        }
+
+        .toolbar {
+          grid-template-columns: 1fr;
+        }
+
+        .kpis,
+        .mini-grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+
+        .rules-list {
+          columns: 1;
+        }
+
+        th,
+        td {
+          padding: 9px 10px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">象</div>
+        <div>
+          <h1>大象考勤系统</h1>
+          <p class="period" id="periodText">未导入总表</p>
+        </div>
+      </div>
+      <div class="actions">
+        <label class="file-button" title="导入当月考勤总表">
+          <i class="icon" data-lucide="file-up"></i>
+          <span>导入总表</span>
+          <input id="fileInput" type="file" accept=".xlsx,.xls" />
+        </label>
+        <button id="exportPersonBtn" disabled>
+          <i class="icon" data-lucide="file-down"></i>
+          <span>导出单人模板</span>
+        </button>
+        <button id="exportPersonImageBtn" disabled>
+          <i class="icon" data-lucide="download"></i>
+          <span>导出单人图片</span>
+        </button>
+        <button id="exportAllPersonsBtn" disabled>
+          <i class="icon" data-lucide="file-down"></i>
+          <span>导出全员模板包</span>
+        </button>
+        <button id="exportAllPersonImagesBtn" disabled>
+          <i class="icon" data-lucide="download"></i>
+          <span>导出全员图片包</span>
+        </button>
+        <button class="primary" id="exportSummaryBtn" disabled>
+          <i class="icon" data-lucide="download"></i>
+          <span>导出确认表</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="app">
+      <section class="toolbar">
+        <div class="searchbox">
+          <i class="icon" data-lucide="search"></i>
+          <input id="searchInput" type="search" placeholder="搜索姓名、部门、职位" autocomplete="off" />
+        </div>
+        <div class="selectbox">
+          <i class="icon" data-lucide="building-2"></i>
+          <select id="departmentSelect" aria-label="部门筛选">
+            <option value="">全部部门</option>
+          </select>
+        </div>
+        <label class="setting">
+          <input id="excludeService" type="checkbox" checked />
+          <span>排除客服组</span>
+        </label>
+        <label class="setting">
+          <input id="extraCardPenalty" type="checkbox" checked />
+          <span>补卡超 3 次计半天事假</span>
+        </label>
+        <div class="fixed-days-control">
+          <label for="fixedScheduledDays">固定出勤天数</label>
+          <input id="fixedScheduledDays" type="number" min="0" max="31" step="0.5" placeholder="留空" />
+          <button id="applyFixedScheduledBtn" disabled>填给所有人</button>
+        </div>
+      </section>
+
+      <section class="panel rules-panel">
+        <div class="panel-head">
+          <div class="panel-title">
+            <i class="icon" data-lucide="table-2"></i>
+            <span>考勤规则</span>
+          </div>
+          <div class="panel-meta">当前 HTML 内置规则</div>
+        </div>
+        <div class="rules-body">
+          <ol class="rules-list">
+            <li>工作日为周一至周五，正常班计入应出勤。</li>
+            <li>休息日不计入应出勤。</li>
+            <li>班次为空且无打卡、审批、结果记录，不计入应出勤。</li>
+            <li>默认工作时间为 08:30-18:00，午休 12:00-13:30。</li>
+            <li>法定节假日前一天按 16:00 下班。</li>
+            <li>上午请假 08:30-12:00 按 3.5h。</li>
+            <li>下午请假 13:30-18:00 按 4.5h。</li>
+            <li>全天请假按 8h。</li>
+            <li>病假、事假、旷工、调休、年假按小时统计。</li>
+            <li>出差、居家、婚假、丧假、产假、产检假、陪产假、育儿假按天统计。</li>
+            <li>所有假期类型都显示，数量为 0 也列出。</li>
+            <li>外出审批不算出差。</li>
+            <li>外出审批有两个打卡记录时按正常考勤核算。</li>
+            <li>全天外出或全天出差审批覆盖当天考勤异常。</li>
+            <li>重复或重叠的外出、出差审批取长覆盖，不重复累加。</li>
+            <li>出差只核算当月产生的出差天数。</li>
+            <li>出差按审批显示天数核算，不按打卡时间推算。</li>
+            <li>普通工作日晚于 20:00 下班计餐补。</li>
+            <li>出差晚于 20:00 不计餐补，外出晚于 20:00 计餐补。</li>
+            <li>线下销售部-区域销售、新零售业务部大区销售不享受餐补。</li>
+            <li>21:00 后下班，次日 9:00 前打卡不算迟到。</li>
+            <li>22:00 后下班，次日 9:30 前打卡不算迟到。</li>
+            <li>23:00 后下班，次日 10:00 前打卡不算迟到。</li>
+            <li>00:00 后下班，次日 11:00 前打卡不算迟到。</li>
+            <li>2026-05-20 至 2026-05-30、2026-06-01 至 2026-06-21，销售部-电商部、品牌营销部-兴趣电商业务部、品牌设计组员工凌晨 2:00 后下班，次日 13:30 前打卡不算迟到。</li>
+            <li>超过宽限时间后继续按迟到分桶核算。</li>
+            <li>迟到 30 分钟内计入前半部分。</li>
+            <li>迟到 30 分钟以上且 1 小时内计入后半部分。</li>
+            <li>迟到超过 1 小时折算事假小时。</li>
+            <li>上班缺卡按 3.5h 事假。</li>
+            <li>下班缺卡按下午工作时长，普通日 4.5h，节前日 2.5h。</li>
+            <li>上下班均缺卡按旷工，普通日 8h，节前日 6h。</li>
+            <li>每月补卡超过 3 次，额外计 4h 事假。</li>
+            <li>早退 1 小时内计早退次数。</li>
+            <li>早退超过 1 小时折算事假小时。</li>
+            <li>有请假审批覆盖的早退不重复处罚。</li>
+            <li>出差、外出本身不取消全勤资格。</li>
+            <li>全勤要求无假期、迟到、早退、缺卡、补卡异常。</li>
+            <li>计薪天数按应出勤 - 事假/8 - 旷工/8 计算。</li>
+            <li>固定出勤天数留空时按系统自动计算；填写后可一键覆盖所有员工应出勤天数并重算计薪。</li>
+            <li>单人考勤确认模板支持导出 Excel，也支持按图片样张导出 PNG；全员图片按部门文件夹打包。</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="kpis" id="kpis"></section>
+
+      <section class="content">
+        <section class="panel">
+          <div class="panel-head">
+            <div class="panel-title">
+              <i class="icon" data-lucide="table-2"></i>
+              <span>公司考勤统计</span>
+            </div>
+            <div class="panel-meta" id="employeeCount">0 人</div>
+          </div>
+          <div class="table-wrap" id="employeeTableWrap">
+            <div class="empty">
+              <div>
+                <strong>等待导入当月考勤总表</strong>
+                <p>支持钉钉每日统计总表格式。</p>
+              </div>
+            </div>
+          </div>
+          <div class="panel-head statusbar">
+            <span id="sourceInfo">未读取文件</span>
+            <span id="excludedInfo">客服组 0 人已排除</span>
+          </div>
+        </section>
+
+        <aside class="panel">
+          <div class="panel-head">
+            <div class="panel-title">
+              <i class="icon" data-lucide="user-round-check"></i>
+              <span>单人考勤确认</span>
+            </div>
+            <div class="panel-meta" id="selectedMeta">未选择</div>
+          </div>
+          <div class="detail-body" id="detailBody">
+            <div class="empty">
+              <div>
+                <strong>选择员工查看明细</strong>
+                <p>可按姓名搜索后导出个人考勤确认模板。</p>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </section>
+    </main>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+      const COLS = {
+        name: "姓名",
+        group: "考勤组",
+        department: "部门",
+        jobNo: "工号",
+        title: "职位",
+        userId: "UserId",
+        date: "日期",
+        workDate: "workDate",
+        shift: "班次",
+        inTime: "上班1打卡时间",
+        inResult: "上班1打卡结果",
+        outTime: "下班1打卡时间",
+        outResult: "下班1打卡结果",
+        approval: "关联的审批单",
+      };
+
+      const DETAIL_HEADERS = [
+        "姓名",
+        "考勤组",
+        "部门",
+        "职位",
+        "日期",
+        "班次",
+        "上班1打卡时间",
+        "上班1打卡结果",
+        "下班1打卡时间",
+        "下班1打卡结果",
+        "关联的审批单",
+      ];
+
+      const SUMMARY_HEADERS = [
+        "序号",
+        "部门",
+        "姓名",
+        "应出勤天数",
+        "计薪天数",
+        "加班餐补（天）",
+        "病假(H)",
+        "事假(H)",
+        "旷工(H)",
+        "迟到(次)",
+        "出差(天)",
+        "居家（天）",
+        "调休(H)",
+        "年假(H)",
+        "婚假(天)",
+        "丧假(天)",
+        "产假(天)",
+        "产检假(天)",
+        "陪产假（天）",
+        "育儿假（天）",
+        "全勤奖",
+        "员工签名",
+        "备注",
+      ];
+
+      const LEAVE_ITEMS = [
+        { key: "sickHours", label: "病假", unit: "H" },
+        { key: "personalHours", label: "事假", unit: "H" },
+        { key: "absenceHours", label: "旷工", unit: "H" },
+        { key: "businessDays", label: "出差", unit: "天" },
+        { key: "homeDays", label: "居家", unit: "天" },
+        { key: "compHours", label: "调休", unit: "H" },
+        { key: "annualHours", label: "年假", unit: "H" },
+        { key: "marriageDays", label: "婚假", unit: "天" },
+        { key: "funeralDays", label: "丧假", unit: "天" },
+        { key: "maternityDays", label: "产假", unit: "天" },
+        { key: "prenatalDays", label: "产检假", unit: "天" },
+        { key: "paternityDays", label: "陪产假", unit: "天" },
+        { key: "childcareDays", label: "育儿假", unit: "天" },
+      ];
+
+      const LEGAL_HOLIDAY_EVE_DATES = new Set([
+        "2025-12-31",
+        "2026-02-14",
+        "2026-04-03",
+        "2026-04-30",
+        "2026-06-18",
+        "2026-09-24",
+        "2026-09-30",
+      ]);
+
+      const SPECIAL_LATE_RULE_RANGES = [
+        { start: "2026-05-20", end: "2026-05-30" },
+        { start: "2026-06-01", end: "2026-06-21" },
+      ];
+
+      const SPECIAL_LATE_DEPARTMENT_KEYWORDS = ["销售部-电商部", "品牌营销部-兴趣电商业务部", "品牌设计组"];
+
+      const state = {
+        sourceName: "",
+        rawRows: [],
+        period: null,
+        employees: [],
+        filteredEmployees: [],
+        visibleEmployees: [],
+        selectedName: "",
+        excludedCount: 0,
+        fixedScheduledDays: null,
+      };
+
+      const fileInput = document.getElementById("fileInput");
+      const searchInput = document.getElementById("searchInput");
+      const departmentSelect = document.getElementById("departmentSelect");
+      const exportPersonBtn = document.getElementById("exportPersonBtn");
+      const exportPersonImageBtn = document.getElementById("exportPersonImageBtn");
+      const exportAllPersonsBtn = document.getElementById("exportAllPersonsBtn");
+      const exportAllPersonImagesBtn = document.getElementById("exportAllPersonImagesBtn");
+      const exportSummaryBtn = document.getElementById("exportSummaryBtn");
+      const excludeService = document.getElementById("excludeService");
+      const extraCardPenalty = document.getElementById("extraCardPenalty");
+      const fixedScheduledDaysInput = document.getElementById("fixedScheduledDays");
+      const applyFixedScheduledBtn = document.getElementById("applyFixedScheduledBtn");
+
+      fileInput.addEventListener("change", (event) => {
+        const file = event.target.files?.[0];
+        if (file) readWorkbook(file);
+      });
+
+      searchInput.addEventListener("input", renderAll);
+      departmentSelect.addEventListener("change", renderAll);
+      excludeService.addEventListener("change", rebuildFromRaw);
+      extraCardPenalty.addEventListener("change", rebuildFromRaw);
+      applyFixedScheduledBtn.addEventListener("click", applyFixedScheduledDaysFromInput);
+      exportPersonBtn.addEventListener("click", exportSelectedPerson);
+      exportPersonImageBtn.addEventListener("click", exportSelectedPersonImage);
+      exportAllPersonsBtn.addEventListener("click", exportAllPersonTemplates);
+      exportAllPersonImagesBtn.addEventListener("click", exportAllPersonImages);
+      exportSummaryBtn.addEventListener("click", exportSummary);
+
+      renderKpis(emptyTotals());
+      refreshIcons();
+
+      async function readWorkbook(file) {
+        if (!window.XLSX) {
+          showToast("表格解析库未加载，请联网后重新打开本页面。");
+          return;
+        }
+
+        try {
+          const buffer = await file.arrayBuffer();
+          const workbook = XLSX.read(buffer, { type: "array", cellDates: false });
+          const firstSheetName = workbook.SheetNames[0];
+          const sheet = workbook.Sheets[firstSheetName];
+          const matrix = XLSX.utils.sheet_to_json(sheet, {
+            header: 1,
+            raw: false,
+            defval: "",
+            blankrows: false,
+          });
+
+          const parsed = parseAttendanceMatrix(matrix);
+          state.sourceName = file.name;
+          state.rawRows = parsed.rows;
+          state.period = parsed.period;
+          state.selectedName = "";
+          state.fixedScheduledDays = null;
+          fixedScheduledDaysInput.value = "";
+          rebuildFromRaw();
+          showToast(`已导入 ${file.name}`);
+        } catch (error) {
+          console.error(error);
+          showToast(`导入失败：${error.message || error}`);
+        } finally {
+          fileInput.value = "";
+        }
+      }
+
+      function parseAttendanceMatrix(matrix) {
+        const headerIndex = matrix.findIndex((row) => {
+          const cells = row.map(cleanText);
+          return cells.includes(COLS.name) && cells.includes(COLS.date) && cells.includes(COLS.shift);
+        });
+
+        if (headerIndex < 0) {
+          throw new Error("未识别到固定模板表头。");
+        }
+
+        const titleText = matrix.slice(0, headerIndex).flat().map(cleanText).join(" ");
+        const headers = matrix[headerIndex].map(cleanText);
+        const index = new Map(headers.map((header, i) => [header, i]));
+        const missing = [COLS.name, COLS.department, COLS.date, COLS.shift, COLS.inTime, COLS.inResult, COLS.outTime, COLS.outResult, COLS.approval].filter(
+          (key) => !index.has(key),
+        );
+        if (missing.length) {
+          throw new Error(`缺少字段：${missing.join("、")}`);
+        }
+
+        const rows = [];
+        for (let r = headerIndex + 1; r < matrix.length; r += 1) {
+          const line = matrix[r];
+          const row = {};
+          Object.values(COLS).forEach((key) => {
+            row[key] = cleanText(line[index.get(key)]);
+          });
+          if (!row[COLS.name] || row[COLS.name] === COLS.name) continue;
+          const parsedDate = parseDateLabel(row[COLS.date]);
+          row.__date = parsedDate;
+          row.__rowNumber = r + 1;
+          rows.push(row);
+        }
+
+        let period = parsePeriod(titleText);
+        if (!period && rows.length) {
+          const dates = rows.map((row) => row.__date).filter(Boolean).sort((a, b) => a - b);
+          if (dates.length) {
+            period = { start: dates[0], end: dates[dates.length - 1] };
+          }
+        }
+        if (!period) throw new Error("未识别统计月份。");
+        return { rows, period };
+      }
+
+      function rebuildFromRaw() {
+        if (!state.rawRows.length) {
+          renderAll();
+          return;
+        }
+        const model = buildAttendanceModel(state.rawRows, state.period, {
+          excludeService: excludeService.checked,
+          extraCardPenalty: extraCardPenalty.checked,
+        });
+        state.employees = model.employees;
+        state.excludedCount = model.excludedCount;
+        applyFixedScheduledDaysToEmployees();
+        renderDepartmentOptions();
+        renderAll();
+      }
+
+      function buildAttendanceModel(rows, period, options) {
+        const byName = new Map();
+        const excludedNames = new Set();
+
+        rows.forEach((row) => {
+          const name = row[COLS.name];
+          const department = row[COLS.department] || "";
+          const excluded = options.excludeService && department.includes("客服");
+          if (excluded) excludedNames.add(name);
+          if (excluded) return;
+
+          if (!byName.has(name)) {
+            byName.set(name, createEmployee(name));
+          }
+          const employee = byName.get(name);
+          employee.rows.push(row);
+          if (!employee.department && department) employee.department = department;
+          if (!employee.group && row[COLS.group]) employee.group = row[COLS.group];
+          if (!employee.title && row[COLS.title]) employee.title = row[COLS.title];
+          collectApprovalItems(employee, row, period);
+        });
+
+        const employees = [...byName.values()].map((employee) => finalizeEmployee(employee, period, options));
+        employees.sort((a, b) => {
+          const dept = a.department.localeCompare(b.department, "zh-Hans-CN");
+          if (dept) return dept;
+          return a.name.localeCompare(b.name, "zh-Hans-CN");
+        });
+        return { employees, excludedCount: excludedNames.size };
+      }
+
+      function createEmployee(name) {
+        return {
+          name,
+          department: "",
+          group: "",
+          title: "",
+          rows: [],
+          approvalMap: new Map(),
+          supplementKeys: new Set(),
+        };
+      }
+
+      function finalizeEmployee(employee, period, options) {
+        employee.rows.sort((a, b) => (a.__date || 0) - (b.__date || 0));
+        const metrics = {
+          scheduledDays: 0,
+          payDays: 0,
+          mealDays: 0,
+          sickHours: 0,
+          personalHours: 0,
+          absenceHours: 0,
+          lateWithin30: 0,
+          lateWithin60: 0,
+          lateAsLeaveHours: 0,
+          businessDays: 0,
+          homeDays: 0,
+          compHours: 0,
+          annualHours: 0,
+          marriageDays: 0,
+          funeralDays: 0,
+          maternityDays: 0,
+          prenatalDays: 0,
+          paternityDays: 0,
+          childcareDays: 0,
+          earlyLeaveCount: 0,
+          missingCardCount: 0,
+          supplementCount: 0,
+          fullAttendance: false,
+          notes: [],
+        };
+
+        applyApprovalItems(metrics, [...employee.approvalMap.values()], period);
+
+        employee.supplementKeys.forEach(() => {
+          metrics.supplementCount += 1;
+        });
+
+        employee.rows.forEach((row, index) => {
+          const shift = row[COLS.shift] || "";
+          const scheduled = isScheduledWorkday(row, shift);
+          const approvalText = row[COLS.approval] || "";
+          const inResult = row[COLS.inResult] || "";
+          const outResult = row[COLS.outResult] || "";
+          const hasFullDayTravel = hasFullDayTravelApproval(row);
+          const previous = employee.rows[index - 1];
+
+          if (scheduled) metrics.scheduledDays += 1;
+
+          if (shouldCountMeal(row, employee)) metrics.mealDays += 1;
+
+          if (!scheduled) return;
+
+          const supplementFromStatus = [inResult, outResult].filter((value) => value.includes("补卡")).length;
+          if (supplementFromStatus && !approvalText.includes("补卡申请")) {
+            metrics.supplementCount += supplementFromStatus;
+          }
+
+          if (!hasFullDayTravel) {
+            applyMissingCardRules(metrics, row);
+            applyLateRules(metrics, row, previous, employee);
+            applyEarlyLeaveRules(metrics, row);
+          }
+
+          if (inResult.includes("旷工") || outResult.includes("旷工")) {
+            metrics.absenceHours += 8;
+            metrics.notes.push(`${row[COLS.date]} 旷工`);
+          }
+        });
+
+        if (options.extraCardPenalty && metrics.supplementCount > 3) {
+          metrics.personalHours += 4;
+          metrics.notes.push(`补卡 ${metrics.supplementCount} 次，超过 3 次计 4 小时事假`);
+        }
+
+        metrics.personalHours += metrics.lateAsLeaveHours;
+        roundMetricHours(metrics);
+        metrics.autoScheduledDays = metrics.scheduledDays;
+        metrics.payDays = round2(metrics.scheduledDays - metrics.personalHours / 8 - metrics.absenceHours / 8);
+
+        const hasAnyLeave =
+          metrics.sickHours ||
+          metrics.personalHours ||
+          metrics.absenceHours ||
+          metrics.homeDays ||
+          metrics.compHours ||
+          metrics.annualHours ||
+          metrics.marriageDays ||
+          metrics.funeralDays ||
+          metrics.maternityDays ||
+          metrics.prenatalDays ||
+          metrics.paternityDays ||
+          metrics.childcareDays;
+
+        metrics.fullAttendance =
+          !hasAnyLeave &&
+          metrics.lateWithin30 === 0 &&
+          metrics.lateWithin60 === 0 &&
+          metrics.earlyLeaveCount === 0 &&
+          metrics.missingCardCount === 0 &&
+          metrics.supplementCount === 0;
+
+        if (metrics.lateWithin30 || metrics.lateWithin60) {
+          metrics.notes.push(`迟到 ${formatLate(metrics)} 次`);
+        }
+        if (metrics.earlyLeaveCount) metrics.notes.push(`早退 ${metrics.earlyLeaveCount} 次`);
+        if (metrics.missingCardCount) metrics.notes.push(`缺卡 ${metrics.missingCardCount} 次`);
+
+        employee.metrics = metrics;
+        employee.searchText = [employee.name, employee.department, employee.group, employee.title].join(" ").toLowerCase();
+        return employee;
+      }
+
+      function collectApprovalItems(employee, row, period) {
+        const approvalText = row[COLS.approval] || "";
+        if (!approvalText) return;
+
+        const supplementMatches = approvalText.match(/补卡申请\d{1,2}[-./月]\d{1,2}\s+\d{1,2}[:：]\d{2}到\d{1,2}[-./月]\d{1,2}\s+\d{1,2}[:：]\d{2}/g) || [];
+        supplementMatches.forEach((entry) => employee.supplementKeys.add(entry));
+
+        const segments = splitApprovalSegments(approvalText);
+        segments.forEach((segment) => {
+          const ranged = parseRangedApproval(segment, period);
+          if (ranged) {
+            const key = `range|${ranged.type}|${dateKey(ranged.start)}|${dateKey(ranged.end)}|${ranged.amount}|${ranged.unit}`;
+            employee.approvalMap.set(key, ranged);
+            return;
+          }
+
+          const simple = parseSimpleApproval(segment, row.__date);
+          if (simple) {
+            const rowKey = row.__date ? dateKey(row.__date) : row[COLS.date];
+            const key = `simple|${rowKey}|${simple.type}|${simple.amount}|${simple.unit}|${segment}`;
+            employee.approvalMap.set(key, simple);
+          }
+        });
+      }
+
+      function splitApprovalSegments(text) {
+        return text
+          .split(/[，,、；;]/)
+          .map((item) => cleanText(item))
+          .filter(Boolean);
+      }
+
+      function parseRangedApproval(text, period) {
+        if (text.includes("补卡申请")) return null;
+        const typeMatch = text.match(/^(病假|事假|旷工|出差|居家|调休|年假|婚假|丧假|产假|产检假|陪产假|育儿假|外出|外勤)/);
+        if (!typeMatch) return null;
+        const rangeMatch = text.match(/(\d{1,2})[-./月](\d{1,2})\s+(\d{1,2})[:：](\d{2})到(\d{1,2})[-./月](\d{1,2})\s+(\d{1,2})[:：](\d{2})\s*([\d.]+)\s*(小时|天)/);
+        if (!rangeMatch) return null;
+        const start = dateFromMonthDay(period.start.getFullYear(), Number(rangeMatch[1]), Number(rangeMatch[2]), Number(rangeMatch[3]), Number(rangeMatch[4]));
+        let endYear = period.start.getFullYear();
+        const endMonth = Number(rangeMatch[5]);
+        if (endMonth < Number(rangeMatch[1]) && period.start.getMonth() + 1 >= Number(rangeMatch[1])) endYear += 1;
+        const end = dateFromMonthDay(endYear, endMonth, Number(rangeMatch[6]), Number(rangeMatch[7]), Number(rangeMatch[8]));
+        return {
+          type: normalizeApprovalType(typeMatch[1]),
+          start,
+          end,
+          amount: Number(rangeMatch[9]),
+          unit: rangeMatch[10],
+          source: text,
+        };
+      }
+
+      function parseSimpleApproval(text, rowDate) {
+        if (text.includes("补卡申请")) return null;
+        const match = text.match(/(病假|事假|旷工|出差|居家|调休|年假|婚假|丧假|产假|产检假|陪产假|育儿假)\s*([\d.]+)\s*(小时|天)/);
+        if (!match) return null;
+        return {
+          type: normalizeApprovalType(match[1]),
+          start: rowDate || null,
+          end: rowDate || null,
+          amount: Number(match[2]),
+          unit: match[3],
+          source: text,
+          simple: true,
+        };
+      }
+
+      function normalizeApprovalType(type) {
+        return type;
+      }
+
+      function applyApprovalItems(metrics, items, period) {
+        const travelItems = [];
+        items.forEach((item) => {
+          if (item.type === "出差") {
+            travelItems.push(item);
+            return;
+          }
+          applyApprovalItem(metrics, item, period);
+        });
+        applyTravelApprovals(metrics, travelItems, period);
+      }
+
+      function applyTravelApprovals(metrics, items, period) {
+        const entries = items
+          .map((item) => {
+            const value = prorateApproval(item, period);
+            const clipped = clipRangeToPeriod(item.start, item.end, period);
+            if (!value || !clipped) return null;
+            return { item, value, start: clipped.start, end: clipped.end };
+          })
+          .filter(Boolean)
+          .sort((a, b) => a.start - b.start || b.end - a.end || b.value.days - a.value.days);
+
+        let cluster = [];
+        let clusterEnd = null;
+        const flushCluster = () => {
+          if (!cluster.length) return;
+          const longest = cluster.reduce((best, entry) => {
+            if (!best) return entry;
+            if (entry.value.days !== best.value.days) return entry.value.days > best.value.days ? entry : best;
+            const entryDuration = entry.end - entry.start;
+            const bestDuration = best.end - best.start;
+            return entryDuration > bestDuration ? entry : best;
+          }, null);
+          metrics.businessDays += longest.value.days;
+          cluster = [];
+          clusterEnd = null;
+        };
+
+        entries.forEach((entry) => {
+          if (!cluster.length || entry.start <= clusterEnd) {
+            cluster.push(entry);
+            clusterEnd = clusterEnd == null || entry.end > clusterEnd ? entry.end : clusterEnd;
+            return;
+          }
+          flushCluster();
+          cluster.push(entry);
+          clusterEnd = entry.end;
+        });
+        flushCluster();
+      }
+
+      function applyApprovalItem(metrics, item, period) {
+        const value = prorateApproval(item, period);
+        if (!value) return;
+
+        if (item.type === "病假") metrics.sickHours += value.hours;
+        if (item.type === "事假") metrics.personalHours += value.hours;
+        if (item.type === "旷工") metrics.absenceHours += value.hours;
+        if (item.type === "调休") metrics.compHours += value.hours;
+        if (item.type === "年假") metrics.annualHours += value.hours;
+        if (item.type === "出差") metrics.businessDays += value.days;
+        if (item.type === "居家") metrics.homeDays += value.days;
+        if (item.type === "婚假") metrics.marriageDays += value.days;
+        if (item.type === "丧假") metrics.funeralDays += value.days;
+        if (item.type === "产假") metrics.maternityDays += value.days;
+        if (item.type === "产检假") metrics.prenatalDays += value.days;
+        if (item.type === "陪产假") metrics.paternityDays += value.days;
+        if (item.type === "育儿假") metrics.childcareDays += value.days;
+      }
+
+      function prorateApproval(item, period) {
+        const hourTypes = new Set(["病假", "事假", "旷工", "调休", "年假"]);
+        const dayTypes = new Set(["出差", "居家", "婚假", "丧假", "产假", "产检假", "陪产假", "育儿假"]);
+        const clipped = clipRangeToPeriod(item.start, item.end, period);
+
+        if (item.unit === "小时") {
+          if (!rangeTouchesPeriod(item.start, item.end, period)) return null;
+          const normalizedHours = normalizeLeaveHoursByTime(item);
+          const hours = normalizedHours == null ? item.amount : normalizedHours;
+          return { hours, days: round2(hours / 8) };
+        }
+
+        if (item.unit === "天") {
+          const isCrossPeriod = item.start && item.end && (item.start < startOfDay(period.start) || item.end > endOfDay(period.end));
+          if (!isCrossPeriod) {
+            if (hourTypes.has(item.type)) {
+              const normalizedHours = normalizeLeaveHoursByTime(item);
+              return { hours: normalizedHours == null ? round2(item.amount * 8) : normalizedHours, days: item.amount };
+            }
+            if (dayTypes.has(item.type)) return { hours: 0, days: item.amount };
+          }
+
+          if (!clipped) return null;
+          if (hourTypes.has(item.type)) {
+            return { hours: countWeekdays(clipped.start, clipped.end) * 8, days: countWeekdays(clipped.start, clipped.end) };
+          }
+          return { hours: 0, days: countCalendarDays(clipped.start, clipped.end) };
+        }
+        return null;
+      }
+
+      function normalizeLeaveHoursByTime(item) {
+        const leaveTypes = new Set(["病假", "事假", "旷工", "调休", "年假"]);
+        if (!leaveTypes.has(item.type) || !item.start || !item.end) return null;
+        if (item.start.toDateString() !== item.end.toDateString()) return null;
+
+        const startMinutes = item.start.getHours() * 60 + item.start.getMinutes();
+        const endMinutes = item.end.getHours() * 60 + item.end.getMinutes();
+        if (startMinutes <= 8 * 60 + 30 && endMinutes >= 18 * 60) return 8;
+        if (startMinutes <= 8 * 60 + 30 && endMinutes >= 12 * 60 && endMinutes <= 13 * 60 + 30) return 3.5;
+        if (startMinutes >= 12 * 60 && startMinutes <= 13 * 60 + 30 && endMinutes >= 18 * 60) return 4.5;
+        return null;
+      }
+
+      function applyMissingCardRules(metrics, row) {
+        const inResult = row[COLS.inResult] || "";
+        const outResult = row[COLS.outResult] || "";
+        const inTime = row[COLS.inTime] || "";
+        const outTime = row[COLS.outTime] || "";
+        const approvalText = row[COLS.approval] || "";
+        const approvedAbsence = hasLeaveApproval(approvalText) || hasOutsideStatus(inResult, outResult, approvalText);
+        const inMissing = !approvedAbsence && !hasApprovedAbsenceStatus(inResult) && (inResult.includes("缺卡") || (!inTime && !inResult));
+        const outMissing = !approvedAbsence && !hasApprovedAbsenceStatus(outResult) && (outResult.includes("缺卡") || (!outTime && !outResult));
+        const outMissingHours = getAfternoonWorkHours(row);
+        const fullMissingHours = round2(3.5 + outMissingHours);
+
+        if (inMissing && outMissing) {
+          metrics.absenceHours += fullMissingHours;
+          metrics.missingCardCount += 2;
+          metrics.notes.push(`${row[COLS.date]} 上下班缺卡，计旷工 ${formatNumber(fullMissingHours)} 小时`);
+          return;
+        }
+
+        if (inMissing) {
+          metrics.personalHours += 3.5;
+          metrics.missingCardCount += 1;
+          metrics.notes.push(`${row[COLS.date]} 上班缺卡，计事假 3.5 小时`);
+        }
+        if (outMissing) {
+          metrics.personalHours += outMissingHours;
+          metrics.missingCardCount += 1;
+          metrics.notes.push(`${row[COLS.date]} 下班缺卡，计事假 ${formatNumber(outMissingHours)} 小时`);
+        }
+      }
+
+      function applyLateRules(metrics, row, previous, employee) {
+        const result = row[COLS.inResult] || "";
+        if (!result.includes("迟到")) return;
+        let actual = parseTimeToMinutes(row[COLS.inTime]);
+        if (actual == null) return;
+        actual = getApprovedLateCutoff(row, actual);
+        const start = getShiftStart(row[COLS.shift]);
+        const nextDayAllowance = getNextDayAllowance(previous, employee);
+        const adjustedStart = start + nextDayAllowance;
+        const delay = actual - adjustedStart;
+        if (delay <= 0) return;
+
+        if (delay <= 30) {
+          metrics.lateWithin30 += 1;
+        } else if (delay < 60) {
+          metrics.lateWithin60 += 1;
+        } else {
+          const hours = round2(delay / 60);
+          metrics.lateAsLeaveHours += hours;
+          metrics.notes.push(`${row[COLS.date]} 迟到 ${delay} 分钟，计事假 ${formatNumber(hours)} 小时`);
+        }
+      }
+
+      function applyEarlyLeaveRules(metrics, row) {
+        if (hasLeaveApproval(row[COLS.approval] || "")) return;
+        const result = row[COLS.outResult] || "";
+        if (!result.includes("早退")) return;
+        const actual = parseTimeToMinutes(row[COLS.outTime]);
+        if (actual == null) return;
+        const end = getShiftEnd(row[COLS.shift], row);
+        const early = end - actual;
+        if (early <= 0) return;
+        if (early >= 60) {
+          const hours = round2(early / 60);
+          metrics.personalHours += hours;
+          metrics.notes.push(`${row[COLS.date]} 早退 ${early} 分钟，计事假 ${formatNumber(hours)} 小时`);
+        } else {
+          metrics.earlyLeaveCount += 1;
+        }
+      }
+
+      function getApprovedLateCutoff(row, actual) {
+        const approvalText = row[COLS.approval] || "";
+        if (!approvalText || !row.__date) return actual;
+        const shiftStart = getShiftStart(row[COLS.shift]);
+        let cutoff = actual;
+
+        splitApprovalSegments(approvalText).forEach((segment) => {
+          if (segment.includes("补卡申请")) return;
+          const typeMatch = segment.match(/^(病假|事假|旷工|居家|调休|年假|婚假|丧假|产假|产检假|陪产假|育儿假|外出|外勤)/);
+          if (!typeMatch) return;
+          const start = parseApprovalStart(segment, row.__date.getFullYear());
+          if (!start || start.toDateString() !== row.__date.toDateString()) return;
+          const startMinutes = start.getHours() * 60 + start.getMinutes();
+          if (startMinutes > shiftStart && startMinutes < cutoff) cutoff = startMinutes;
+        });
+
+        return cutoff;
+      }
+
+      function parseApprovalStart(text, year) {
+        const match = text.match(/(\d{1,2})[-./月](\d{1,2})\s+(\d{1,2})[:：](\d{2})到/);
+        if (!match) return null;
+        return dateFromMonthDay(year, Number(match[1]), Number(match[2]), Number(match[3]), Number(match[4]));
+      }
+
+      function parseApprovalRange(text, year) {
+        const match = text.match(/(\d{1,2})[-./月](\d{1,2})\s+(\d{1,2})[:：](\d{2})到(\d{1,2})[-./月](\d{1,2})\s+(\d{1,2})[:：](\d{2})/);
+        if (!match) return null;
+        const startMonth = Number(match[1]);
+        const endMonth = Number(match[5]);
+        const endYear = endMonth < startMonth ? year + 1 : year;
+        return {
+          start: dateFromMonthDay(year, startMonth, Number(match[2]), Number(match[3]), Number(match[4])),
+          end: dateFromMonthDay(endYear, endMonth, Number(match[6]), Number(match[7]), Number(match[8])),
+        };
+      }
+
+      function getNextDayAllowance(previousRow, employee) {
+        if (!previousRow) return 0;
+        const previousText = `${previousRow[COLS.inResult] || ""} ${previousRow[COLS.outResult] || ""} ${previousRow[COLS.approval] || ""}`;
+        if (/(出差|外出|外勤)/.test(previousText)) return 0;
+        const out = parseCheckoutMinute(previousRow[COLS.outTime]);
+        if (out == null) return 0;
+        if (isSpecialLateAllowance(previousRow, employee, out)) return 5 * 60;
+        if (!isScheduledWorkday(previousRow, previousRow[COLS.shift] || "")) return 0;
+        if (out >= 24 * 60) return 150;
+        if (out >= 23 * 60) return 90;
+        if (out >= 22 * 60) return 60;
+        if (out >= 21 * 60) return 30;
+        return 0;
+      }
+
+      function isSpecialLateAllowance(previousRow, employee, checkoutMinutes) {
+        if (!employee || checkoutMinutes < 26 * 60 || !previousRow.__date) return false;
+        if (!isSpecialLateDate(previousRow.__date)) return false;
+        return isSpecialLateEligible(employee);
+      }
+
+      function isSpecialLateDate(date) {
+        const key = dateKey(date);
+        return SPECIAL_LATE_RULE_RANGES.some((range) => key >= range.start && key <= range.end);
+      }
+
+      function isSpecialLateEligible(employee) {
+        const department = employee.department || "";
+        return SPECIAL_LATE_DEPARTMENT_KEYWORDS.some((keyword) => department.includes(keyword));
+      }
+
+      function hasFullDayTravelApproval(row) {
+        const approvalText = row[COLS.approval] || "";
+        if (!approvalText || !row.__date) return false;
+        const shiftStart = getShiftStart(row[COLS.shift]);
+        const shiftEnd = getShiftEnd(row[COLS.shift], row);
+
+        return splitApprovalSegments(approvalText).some((segment) => {
+          if (segment.includes("补卡申请")) return false;
+          const typeMatch = segment.match(/^(出差|外出|外勤)/);
+          if (!typeMatch) return false;
+          const range = parseApprovalRange(segment, row.__date.getFullYear());
+          if (!range) return false;
+          const dayStart = new Date(row.__date.getFullYear(), row.__date.getMonth(), row.__date.getDate(), 0, 0, 0, 0);
+          const dayEnd = new Date(row.__date.getFullYear(), row.__date.getMonth(), row.__date.getDate(), 23, 59, 59, 999);
+          if (range.end < dayStart || range.start > dayEnd) return false;
+          const coverStart = range.start < dayStart ? 0 : range.start.getHours() * 60 + range.start.getMinutes();
+          const coverEnd = range.end > dayEnd ? 24 * 60 : range.end.getHours() * 60 + range.end.getMinutes();
+          return coverStart <= shiftStart && coverEnd >= shiftEnd;
+        });
+      }
+
+      function hasLeaveApproval(approvalText) {
+        return /(请假|居家|调休|年假|事假|病假|旷工|产假|产检假|陪产假|育儿假|婚假|丧假)/.test(approvalText || "");
+      }
+
+      function hasOutsideStatus(inResult, outResult, approvalText) {
+        const text = `${inResult || ""} ${outResult || ""} ${approvalText || ""}`;
+        return /(外出|外勤)/.test(text);
+      }
+
+      function hasApprovedAbsenceStatus(result) {
+        return /(请假|出差|外出|外勤|居家|调休|年假|事假|病假|旷工|产假|产检假|陪产假|育儿假|婚假|丧假)/.test(result || "");
+      }
+
+      function isScheduledWorkday(row, shift) {
+        if (shift.includes("休息")) return false;
+        if (shift.includes("正常班")) return true;
+        const hasRecord =
+          Boolean(row[COLS.inTime]) ||
+          Boolean(row[COLS.outTime]) ||
+          Boolean(row[COLS.inResult]) ||
+          Boolean(row[COLS.outResult]) ||
+          Boolean(row[COLS.approval]);
+        if (!hasRecord) return false;
+        if (row.__date) {
+          const day = row.__date.getDay();
+          return day >= 1 && day <= 5;
+        }
+        return Boolean(shift);
+      }
+
+      function getShiftStart(shift) {
+        const match = cleanText(shift).match(/(\d{1,2})[:：](\d{2})\s*[-至]/);
+        if (!match) return 8 * 60 + 30;
+        return Number(match[1]) * 60 + Number(match[2]);
+      }
+
+      function getShiftEnd(shift, row) {
+        const match = cleanText(shift).match(/[-至]\s*(\d{1,2})[:：](\d{2})/);
+        const defaultEnd = match ? Number(match[1]) * 60 + Number(match[2]) : 18 * 60;
+        if (row && isLegalHolidayEve(row.__date)) return Math.min(defaultEnd, 16 * 60);
+        return defaultEnd;
+      }
+
+      function getAfternoonWorkHours(row) {
+        const afternoonStart = 13 * 60 + 30;
+        const end = getShiftEnd(row[COLS.shift], row);
+        return round2(Math.max(0, end - afternoonStart) / 60);
+      }
+
+      function isLegalHolidayEve(date) {
+        return Boolean(date && LEGAL_HOLIDAY_EVE_DATES.has(dateKey(date)));
+      }
+
+      function parseCheckoutMinute(value) {
+        const minutes = parseTimeToMinutes(value);
+        if (minutes == null) return null;
+        if (minutes < 6 * 60) return minutes + 24 * 60;
+        return minutes;
+      }
+
+      function parseTimeToMinutes(value) {
+        const text = cleanText(value);
+        const match = text.match(/(\d{1,2})[:：](\d{2})/);
+        if (!match) return null;
+        return Number(match[1]) * 60 + Number(match[2]);
+      }
+
+      function isAfter20(value) {
+        const minutes = parseCheckoutMinute(value);
+        return minutes != null && minutes >= 20 * 60;
+      }
+
+      function shouldCountMeal(row, employee) {
+        if (!isAfter20(row[COLS.outTime])) return false;
+        if (isMealExcluded(employee)) return false;
+        const text = `${row[COLS.inResult] || ""} ${row[COLS.outResult] || ""} ${row[COLS.approval] || ""}`;
+        if (text.includes("出差")) return false;
+        return true;
+      }
+
+      function isMealExcluded(employee) {
+        const department = employee.department || "";
+        const title = employee.title || "";
+        if (department.includes("线下销售部-区域销售") || title.includes("区域销售")) return true;
+        if (department.includes("新零售业务部") && title.includes("大区销售")) return true;
+        return false;
+      }
+
+      function roundMetricHours(metrics) {
+        ["sickHours", "personalHours", "absenceHours", "lateAsLeaveHours", "compHours", "annualHours"].forEach((key) => {
+          metrics[key] = round2(metrics[key]);
+        });
+        ["businessDays", "homeDays", "marriageDays", "funeralDays", "maternityDays", "prenatalDays", "paternityDays", "childcareDays", "mealDays"].forEach((key) => {
+          metrics[key] = round2(metrics[key]);
+        });
+      }
+
+      function parsePeriod(text) {
+        const match = cleanText(text).match(/(\d{4})[-/年](\d{1,2})[-/月](\d{1,2}).*?(\d{4})[-/年](\d{1,2})[-/月](\d{1,2})/);
+        if (!match) return null;
+        return {
+          start: new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])),
+          end: new Date(Number(match[4]), Number(match[5]) - 1, Number(match[6])),
+        };
+      }
+
+      function parseDateLabel(value) {
+        const text = cleanText(value);
+        const match = text.match(/(\d{2,4})[-/年](\d{1,2})[-/月](\d{1,2})/);
+        if (!match) return null;
+        let year = Number(match[1]);
+        if (year < 100) year += 2000;
+        return new Date(year, Number(match[2]) - 1, Number(match[3]));
+      }
+
+      function dateFromMonthDay(year, month, day, hour, minute) {
+        return new Date(year, month - 1, day, hour || 0, minute || 0, 0, 0);
+      }
+
+      function clipRangeToPeriod(start, end, period) {
+        if (!start || !end) return null;
+        const periodStart = startOfDay(period.start);
+        const periodEnd = endOfDay(period.end);
+        if (end < periodStart || start > periodEnd) return null;
+        return {
+          start: start > periodStart ? start : periodStart,
+          end: end < periodEnd ? end : periodEnd,
+        };
+      }
+
+      function rangeTouchesPeriod(start, end, period) {
+        if (!start || !end) return true;
+        return Boolean(clipRangeToPeriod(start, end, period));
+      }
+
+      function startOfDay(date) {
+        return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
+      }
+
+      function endOfDay(date) {
+        return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
+      }
+
+      function countCalendarDays(start, end) {
+        const s = startOfDay(start);
+        const e = startOfDay(end);
+        return Math.max(0, Math.floor((e - s) / 86400000) + 1);
+      }
+
+      function countWeekdays(start, end) {
+        let count = 0;
+        const current = startOfDay(start);
+        const finish = startOfDay(end);
+        while (current <= finish) {
+          const day = current.getDay();
+          if (day >= 1 && day <= 5) count += 1;
+          current.setDate(current.getDate() + 1);
+        }
+        return count;
+      }
+
+      function applyFixedScheduledDaysFromInput() {
+        const raw = fixedScheduledDaysInput.value.trim();
+        if (!raw) {
+          state.fixedScheduledDays = null;
+          applyFixedScheduledDaysToEmployees();
+          renderAll();
+          showToast("已清空固定出勤天数，恢复按规则自动计算。");
+          return;
+        }
+
+        const value = Number(raw);
+        if (!Number.isFinite(value) || value < 0 || value > 31) {
+          showToast("固定出勤天数请输入 0-31 之间的数字，可保留 0.5。");
+          fixedScheduledDaysInput.focus();
+          return;
+        }
+
+        state.fixedScheduledDays = round2(value);
+        fixedScheduledDaysInput.value = formatNumber(state.fixedScheduledDays);
+        applyFixedScheduledDaysToEmployees();
+        renderAll();
+        showToast(`已将应出勤天数按 ${formatNumber(state.fixedScheduledDays)} 天填给所有人。`);
+      }
+
+      function applyFixedScheduledDaysToEmployees() {
+        state.employees.forEach((employee) => {
+          const metrics = employee.metrics;
+          if (metrics.autoScheduledDays == null) metrics.autoScheduledDays = metrics.scheduledDays;
+          metrics.scheduledDays = state.fixedScheduledDays == null ? metrics.autoScheduledDays : state.fixedScheduledDays;
+          metrics.payDays = round2(metrics.scheduledDays - metrics.personalHours / 8 - metrics.absenceHours / 8);
+        });
+      }
+
+      function renderAll() {
+        const query = searchInput.value.trim().toLowerCase();
+        const department = departmentSelect.value;
+        state.filteredEmployees = state.employees.filter((employee) => !department || employee.department === department);
+        state.visibleEmployees = state.filteredEmployees.filter((employee) => !query || employee.searchText.includes(query));
+        if (!state.visibleEmployees.some((employee) => employee.name === state.selectedName)) {
+          state.selectedName = state.visibleEmployees[0]?.name || state.filteredEmployees[0]?.name || "";
+        }
+        renderHeader();
+        renderKpis(calcTotals(state.filteredEmployees));
+        renderEmployeeTable();
+        renderDetail();
+        exportSummaryBtn.disabled = !state.filteredEmployees.length;
+        exportPersonBtn.disabled = !getSelectedEmployee();
+        exportPersonImageBtn.disabled = !getSelectedEmployee();
+        exportAllPersonsBtn.disabled = !state.employees.length;
+        exportAllPersonImagesBtn.disabled = !state.employees.length;
+        applyFixedScheduledBtn.disabled = !state.employees.length;
+        refreshIcons();
+      }
+
+      function renderHeader() {
+        document.getElementById("periodText").textContent = state.period ? `${formatDate(state.period.start)} 至 ${formatDate(state.period.end)}` : "未导入总表";
+        document.getElementById("employeeCount").textContent = `${state.visibleEmployees.length} / ${state.filteredEmployees.length} 人`;
+        document.getElementById("sourceInfo").textContent = state.sourceName || "未读取文件";
+        document.getElementById("excludedInfo").textContent = `客服组 ${state.excludedCount} 人已排除`;
+      }
+
+      function renderDepartmentOptions() {
+        const current = departmentSelect.value;
+        const departments = [...new Set(state.employees.map((employee) => employee.department).filter(Boolean))].sort((a, b) =>
+          a.localeCompare(b, "zh-Hans-CN"),
+        );
+        departmentSelect.innerHTML = [
+          `<option value="">全部部门</option>`,
+          ...departments.map((department) => `<option value="${escapeAttr(department)}">${escapeHtml(department)}</option>`),
+        ].join("");
+        departmentSelect.value = departments.includes(current) ? current : "";
+      }
+
+      function renderKpis(totals) {
+        const cards = [
+          ["员工数", totals.employees, "纳入统计"],
+          ["应出勤", formatNumber(totals.scheduledDays), "天"],
+          ["计薪天数", formatNumber(totals.payDays), "天"],
+          ["事假", formatNumber(totals.personalHours), "小时"],
+          ["病假", formatNumber(totals.sickHours), "小时"],
+          ["迟到", totals.lateText, "次"],
+          ["20:00 后下班", formatNumber(totals.mealDays), "天"],
+          ["全勤", totals.fullAttendance, "人"],
+        ];
+        document.getElementById("kpis").innerHTML = cards
+          .map(
+            ([label, value, note]) => `
+              <div class="kpi-card">
+                <div class="kpi-label">${escapeHtml(label)}</div>
+                <div class="kpi-value">${escapeHtml(String(value))}</div>
+                <div class="kpi-note">${escapeHtml(note)}</div>
+              </div>
+            `,
+          )
+          .join("");
+      }
+
+      function renderEmployeeTable() {
+        const wrap = document.getElementById("employeeTableWrap");
+        if (!state.employees.length) {
+          wrap.innerHTML = `
+            <div class="empty">
+              <div>
+                <strong>等待导入当月考勤总表</strong>
+                <p>支持钉钉每日统计总表格式。</p>
+              </div>
+            </div>`;
+          return;
+        }
+        if (!state.visibleEmployees.length) {
+          wrap.innerHTML = `
+            <div class="empty">
+              <div>
+                <strong>没有匹配员工</strong>
+                <p>调整搜索词后继续查看。</p>
+              </div>
+            </div>`;
+          return;
+        }
+
+        const rows = state.visibleEmployees
+          .map((employee, index) => {
+            const m = employee.metrics;
+            const status = m.fullAttendance ? `<span class="badge good">全勤</span>` : riskBadge(m);
+            return `
+              <tr data-name="${escapeAttr(employee.name)}" class="${employee.name === state.selectedName ? "selected" : ""}">
+                <td class="num">${index + 1}</td>
+                <td class="name-cell">${escapeHtml(employee.name)}</td>
+                <td>${escapeHtml(employee.department || "-")}</td>
+                <td class="num">${formatNumber(m.scheduledDays)}</td>
+                <td class="num">${formatNumber(m.payDays)}</td>
+                <td class="num">${formatNumber(m.personalHours)}</td>
+                <td class="num">${formatNumber(m.sickHours)}</td>
+                <td class="num">${formatLate(m)}</td>
+                <td class="num">${formatNumber(m.businessDays)}</td>
+                <td class="num">${formatNumber(m.mealDays)}</td>
+                <td>${status}</td>
+              </tr>`;
+          })
+          .join("");
+
+        wrap.innerHTML = `
+          <table>
+            <thead>
+              <tr>
+                <th class="num">序号</th>
+                <th>姓名</th>
+                <th>部门</th>
+                <th class="num">应出勤</th>
+                <th class="num">计薪</th>
+                <th class="num">事假(H)</th>
+                <th class="num">病假(H)</th>
+                <th class="num">迟到</th>
+                <th class="num">出差</th>
+                <th class="num">餐补</th>
+                <th>状态</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>`;
+
+        wrap.querySelectorAll("tbody tr").forEach((tr) => {
+          tr.addEventListener("click", () => {
+            state.selectedName = tr.dataset.name;
+            renderAll();
+          });
+        });
+      }
+
+      function riskBadge(metrics) {
+        if (metrics.absenceHours > 0) return `<span class="badge bad">需复核</span>`;
+        if (metrics.personalHours > 0 || metrics.lateWithin30 || metrics.lateWithin60 || metrics.missingCardCount) {
+          return `<span class="badge warn">有异常</span>`;
+        }
+        return `<span class="badge info">正常</span>`;
+      }
+
+      function renderDetail() {
+        const body = document.getElementById("detailBody");
+        const employee = getSelectedEmployee();
+        if (!employee) {
+          document.getElementById("selectedMeta").textContent = "未选择";
+          body.innerHTML = `
+            <div class="empty">
+              <div>
+                <strong>选择员工查看明细</strong>
+                <p>可按姓名搜索后导出个人考勤确认模板。</p>
+              </div>
+            </div>`;
+          return;
+        }
+        const m = employee.metrics;
+        document.getElementById("selectedMeta").textContent = `${employee.rows.length} 条`;
+        const notes = m.notes.slice(0, 8).join("；") || "无异常记录";
+        const leaveCards = LEAVE_ITEMS.map(
+          (item) => `<div class="mini"><span>${item.label}</span><strong>${formatLeaveAmount(m, item)}</strong></div>`,
+        ).join("");
+        const dayRows = employee.rows
+          .map(
+            (row) => `
+              <tr>
+                <td>${escapeHtml(row[COLS.date])}</td>
+                <td>${escapeHtml(row[COLS.shift] || "-")}</td>
+                <td>${escapeHtml(row[COLS.inTime] || "-")}</td>
+                <td>${escapeHtml(row[COLS.inResult] || "-")}</td>
+                <td>${escapeHtml(row[COLS.outTime] || "-")}</td>
+                <td>${escapeHtml(row[COLS.outResult] || "-")}</td>
+              </tr>
+            `,
+          )
+          .join("");
+
+        body.innerHTML = `
+          <div class="selected-title">
+            <div>
+              <div class="selected-name">${escapeHtml(employee.name)}</div>
+              <div class="selected-sub">${escapeHtml(employee.department || "-")} / ${escapeHtml(employee.title || "-")}</div>
+            </div>
+            ${m.fullAttendance ? '<span class="badge good">全勤</span>' : riskBadge(m)}
+          </div>
+          <div class="mini-grid">
+            <div class="mini"><span>应出勤</span><strong>${formatNumber(m.scheduledDays)} 天</strong></div>
+            <div class="mini"><span>计薪天数</span><strong>${formatNumber(m.payDays)} 天</strong></div>
+            <div class="mini"><span>餐补</span><strong>${formatNumber(m.mealDays)} 天</strong></div>
+            <div class="mini"><span>迟到</span><strong>${formatLate(m)} 次</strong></div>
+          </div>
+          <div class="detail-section-title">假期明细</div>
+          <div class="mini-grid">${leaveCards}</div>
+          <div class="notes">${escapeHtml(notes)}</div>
+          <div class="day-list">
+            <table class="day-table">
+              <thead>
+                <tr>
+                  <th>日期</th>
+                  <th>班次</th>
+                  <th>上班</th>
+                  <th>结果</th>
+                  <th>下班</th>
+                  <th>结果</th>
+                </tr>
+              </thead>
+              <tbody>${dayRows}</tbody>
+            </table>
+          </div>
+        `;
+      }
+
+      function calcTotals(employees) {
+        const totals = emptyTotals();
+        totals.employees = employees.length;
+        employees.forEach((employee) => {
+          const m = employee.metrics;
+          totals.scheduledDays += m.scheduledDays;
+          totals.payDays += m.payDays;
+          totals.mealDays += m.mealDays;
+          LEAVE_ITEMS.forEach((item) => {
+            totals[item.key] += m[item.key] || 0;
+          });
+          totals.fullAttendance += m.fullAttendance ? 1 : 0;
+          totals.lateWithin30 += m.lateWithin30;
+          totals.lateWithin60 += m.lateWithin60;
+        });
+        Object.keys(totals).forEach((key) => {
+          if (typeof totals[key] === "number") totals[key] = round2(totals[key]);
+        });
+        totals.lateText = `${totals.lateWithin30}+${totals.lateWithin60}`;
+        return totals;
+      }
+
+      function emptyTotals() {
+        const totals = {
+          employees: 0,
+          scheduledDays: 0,
+          payDays: 0,
+          mealDays: 0,
+          fullAttendance: 0,
+          lateWithin30: 0,
+          lateWithin60: 0,
+          lateText: "0+0",
+        };
+        LEAVE_ITEMS.forEach((item) => {
+          totals[item.key] = 0;
+        });
+        return totals;
+      }
+
+      function exportSelectedPerson() {
+        const employee = getSelectedEmployee();
+        if (!employee) return;
+        const wb = buildPersonWorkbook(employee);
+        XLSX.writeFile(wb, `${safeFileName(employee.name)}_考勤确认模板.xlsx`);
+      }
+
+      async function exportSelectedPersonImage() {
+        const employee = getSelectedEmployee();
+        if (!employee) return;
+
+        try {
+          const canvas = buildPersonImageCanvas(employee);
+          const blob = await canvasToBlob(canvas);
+          downloadBlob(blob, `${safeFileName(employee.name)}_考勤确认模板.png`);
+          showToast(`已导出 ${employee.name} 的考勤确认图片。`);
+        } catch (error) {
+          console.error(error);
+          showToast(`图片导出失败：${error.message || error}`);
+        }
+      }
+
+      async function exportAllPersonTemplates() {
+        if (!state.employees.length) return;
+        if (!window.JSZip) {
+          showToast("压缩包组件未加载，请使用可外发版或联网后重试。");
+          return;
+        }
+
+        exportAllPersonsBtn.disabled = true;
+        showToast("正在生成全员单人考勤模板压缩包...");
+        try {
+          const zip = new JSZip();
+          const monthName = getMonthName() || "当月";
+          const rootName = safePathSegment(`${monthName}公司单人考勤模板`);
+          const root = zip.folder(rootName);
+          const usedNamesByDepartment = new Map();
+
+          state.employees.forEach((employee) => {
+            const departmentName = safePathSegment(employee.department || "未填写部门");
+            const folder = root.folder(departmentName);
+            const used = usedNamesByDepartment.get(departmentName) || new Set();
+            usedNamesByDepartment.set(departmentName, used);
+            const fileName = getUniquePersonTemplateFileName(employee, used);
+            const workbook = buildPersonWorkbook(employee);
+            const content = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+            folder.file(fileName, content);
+          });
+
+          const blob = await zip.generateAsync({ type: "blob" });
+          downloadBlob(blob, `${rootName}.zip`);
+          showToast(`已导出 ${state.employees.length} 份单人模板，按部门文件夹分类。`);
+        } catch (error) {
+          console.error(error);
+          showToast(`导出失败：${error.message || error}`);
+        } finally {
+          renderAll();
+        }
+      }
+
+      async function exportAllPersonImages() {
+        if (!state.employees.length) return;
+        if (!window.JSZip) {
+          showToast("压缩包组件未加载，请使用可外发版或联网后重试。");
+          return;
+        }
+
+        exportAllPersonImagesBtn.disabled = true;
+        showToast("正在生成全员单人考勤图片压缩包...");
+        try {
+          const zip = new JSZip();
+          const monthName = getMonthName() || "当月";
+          const rootName = safePathSegment(`${monthName}公司单人考勤图片`);
+          const root = zip.folder(rootName);
+          const usedNamesByDepartment = new Map();
+
+          for (const employee of state.employees) {
+            const departmentName = safePathSegment(employee.department || "未填写部门");
+            const folder = root.folder(departmentName);
+            const used = usedNamesByDepartment.get(departmentName) || new Set();
+            usedNamesByDepartment.set(departmentName, used);
+            const fileName = getUniquePersonImageFileName(employee, used);
+            const canvas = buildPersonImageCanvas(employee);
+            const blob = await canvasToBlob(canvas);
+            folder.file(fileName, await blobToArrayBuffer(blob));
+          }
+
+          const blob = await zip.generateAsync({ type: "blob" });
+          downloadBlob(blob, `${rootName}.zip`);
+          showToast(`已导出 ${state.employees.length} 张单人考勤图片，按部门文件夹分类。`);
+        } catch (error) {
+          console.error(error);
+          showToast(`图片包导出失败：${error.message || error}`);
+        } finally {
+          renderAll();
+        }
+      }
+
+      function buildPersonWorkbook(employee) {
+        const wb = XLSX.utils.book_new();
+        const periodText = state.period ? `每日统计 统计日期：${formatDate(state.period.start)} 至 ${formatDate(state.period.end)}` : "每日统计";
+        const m = employee.metrics;
+        const leaveSummaryRows = [["假期类型", "数量", "单位"], ...LEAVE_ITEMS.map((item) => [item.label, formatNumber(m[item.key]), item.unit])];
+        const aoa = [
+          [periodText],
+          [`报表生成时间：${formatDateTime(new Date())}`],
+          [],
+          [`员工：${employee.name}`, `部门：${employee.department || "-"}`, `职位：${employee.title || "-"}`],
+          [],
+          ...leaveSummaryRows,
+          [],
+          DETAIL_HEADERS,
+          ...employee.rows.map((row) => [
+            row[COLS.name],
+            row[COLS.group],
+            row[COLS.department],
+            row[COLS.title],
+            row[COLS.date],
+            row[COLS.shift],
+            row[COLS.inTime],
+            row[COLS.inResult],
+            row[COLS.outTime],
+            row[COLS.outResult],
+            row[COLS.approval],
+          ]),
+        ];
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+        ws["!merges"] = [
+          { s: { r: 0, c: 0 }, e: { r: 0, c: 10 } },
+          { s: { r: 1, c: 0 }, e: { r: 1, c: 10 } },
+        ];
+        ws["!cols"] = [12, 14, 24, 20, 16, 22, 14, 16, 14, 16, 46].map((wch) => ({ wch }));
+        XLSX.utils.book_append_sheet(wb, ws, safeSheetName(employee.name));
+        return wb;
+      }
+
+      function buildPersonImageCanvas(employee) {
+        const width = 1600;
+        const margin = 70;
+        const rowHeight = 42;
+        const smallRowHeight = 38;
+        const leaveRows = LEAVE_ITEMS.length + 1;
+        const tableRows = employee.rows.length + 1;
+        const height = 360 + leaveRows * smallRowHeight + 70 + tableRows * rowHeight + 170;
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext("2d");
+        const colors = {
+          bg: "#f6f8fb",
+          white: "#ffffff",
+          ink: "#172033",
+          muted: "#667085",
+          line: "#d8dee8",
+          teal: "#0f766e",
+          softTeal: "#e7f5f3",
+          softBlue: "#eaf1ff",
+          softAmber: "#fff4df",
+          softRed: "#fdecec",
+          tableHead: "#f2f5f8",
+          panel: "#fbfcfe",
+        };
+        const fontFamily = '"Microsoft YaHei", "PingFang SC", "Segoe UI", Arial, sans-serif';
+        const m = employee.metrics;
+
+        ctx.textBaseline = "top";
+        ctx.fillStyle = colors.bg;
+        ctx.fillRect(0, 0, width, height);
+        drawRoundRect(ctx, 38, 36, width - 76, height - 72, 16, colors.white, colors.line, 2);
+
+        let x = margin;
+        let y = 70;
+        drawText(ctx, "单人考勤确认模板", x, y, 38, 800, colors.teal, fontFamily);
+        drawText(ctx, getPersonPeriodText(), x, y + 58, 22, 400, colors.muted, fontFamily);
+        drawText(ctx, `生成时间：${formatDateTime(new Date())}`, width - margin, y + 58, 20, 400, colors.muted, fontFamily, "right");
+        y += 115;
+
+        drawRoundRect(ctx, x, y, width - margin * 2, 96, 10, colors.softTeal, "#b7ded9", 2);
+        const infoWidth = Math.floor((width - margin * 2) / 3);
+        [`员工：${employee.name}`, `部门：${employee.department || "-"}`, `职位：${employee.title || "-"}`].forEach((item, index) => {
+          drawFitText(ctx, item, x + 24 + index * infoWidth, y + 31, infoWidth - 44, 24, 800, colors.ink, fontFamily);
+        });
+        y += 126;
+
+        const cards = [
+          ["应出勤", formatNumber(m.scheduledDays), "天", colors.softBlue],
+          ["计薪天数", formatNumber(m.payDays), "天", colors.softTeal],
+          ["餐补", formatNumber(m.mealDays), "天", colors.softAmber],
+          ["迟到", formatLate(m), "次", colors.softRed],
+        ];
+        const cardWidth = Math.floor((width - margin * 2 - 36) / 4);
+        cards.forEach(([label, value, unit, fill], index) => {
+          const cardX = x + index * (cardWidth + 12);
+          drawRoundRect(ctx, cardX, y, cardWidth, 108, 10, fill, colors.line, 1);
+          drawText(ctx, label, cardX + 22, y + 18, 20, 400, colors.muted, fontFamily);
+          drawText(ctx, value, cardX + 22, y + 52, 31, 800, colors.ink, fontFamily);
+          drawText(ctx, unit, cardX + cardWidth - 22, y + 62, 18, 400, colors.muted, fontFamily, "right");
+        });
+        y += 146;
+
+        drawText(ctx, "假期汇总", x, y, 26, 800, colors.ink, fontFamily);
+        y += 44;
+        const leaveCols = [260, 160, 140];
+        const leaveWidth = leaveCols.reduce((sum, value) => sum + value, 0);
+        drawTableRow(ctx, x, y, leaveCols, ["假期类型", "数量", "单位"], smallRowHeight, colors.tableHead, colors.line, colors.ink, fontFamily, true);
+        let leaveY = y + smallRowHeight;
+        LEAVE_ITEMS.forEach((item) => {
+          drawTableRow(
+            ctx,
+            x,
+            leaveY,
+            leaveCols,
+            [item.label, formatNumber(m[item.key]), item.unit],
+            smallRowHeight,
+            colors.white,
+            colors.line,
+            colors.ink,
+            fontFamily,
+            false,
+          );
+          leaveY += smallRowHeight;
+        });
+
+        const noteX = x + leaveWidth + 42;
+        drawRoundRect(ctx, noteX, y, width - margin - noteX, leaveRows * smallRowHeight, 10, colors.panel, colors.line, 1);
+        drawText(ctx, "确认说明", noteX + 24, y + 24, 23, 800, colors.ink, fontFamily);
+        [
+          "1. 请核对应出勤、计薪、假期、迟到、餐补等数据。",
+          "2. 假期类型为 0 时仍完整列出，便于员工逐项确认。",
+          "3. 明细如有疑问，请按日期核对打卡与审批记录。",
+          "4. 员工核对无误后可签名确认。",
+        ].forEach((line, index) => {
+          drawText(ctx, line, noteX + 24, y + 70 + index * 38, 19, 400, colors.muted, fontFamily);
+        });
+        y = y + leaveRows * smallRowHeight + 76;
+
+        drawText(ctx, "每日打卡明细", x, y, 26, 800, colors.ink, fontFamily);
+        y += 44;
+        const detailCols = [
+          { label: "日期", width: 160, value: (row) => row[COLS.date] },
+          { label: "班次", width: 370, value: (row) => row[COLS.shift] },
+          { label: "上班", width: 150, value: (row) => row[COLS.inTime] },
+          { label: "结果", width: 150, value: (row) => row[COLS.inResult] },
+          { label: "下班", width: 150, value: (row) => row[COLS.outTime] },
+          { label: "结果", width: 150, value: (row) => row[COLS.outResult] },
+          { label: "审批摘要", width: width - margin * 2 - 1130, value: (row) => row[COLS.approval] },
+        ];
+        drawTableRow(
+          ctx,
+          x,
+          y,
+          detailCols.map((col) => col.width),
+          detailCols.map((col) => col.label),
+          rowHeight,
+          colors.tableHead,
+          colors.line,
+          colors.ink,
+          fontFamily,
+          true,
+        );
+        let detailY = y + rowHeight;
+        employee.rows.forEach((row, index) => {
+          const fill = index % 2 === 0 ? colors.white : colors.panel;
+          drawTableRow(
+            ctx,
+            x,
+            detailY,
+            detailCols.map((col) => col.width),
+            detailCols.map((col) => cleanText(col.value(row)) || "-"),
+            rowHeight,
+            fill,
+            colors.line,
+            colors.ink,
+            fontFamily,
+            false,
+          );
+          detailY += rowHeight;
+        });
+
+        y = detailY + 58;
+        drawText(ctx, "员工签名：____________________", x, y, 24, 800, colors.ink, fontFamily);
+        drawText(ctx, "确认日期：____________________", x + 520, y, 24, 800, colors.ink, fontFamily);
+        drawText(ctx, "北京大象和他的朋友们科技有限公司", width - margin, y + 6, 19, 400, colors.muted, fontFamily, "right");
+        return canvas;
+      }
+
+      function exportSummary() {
+        if (!state.filteredEmployees.length) return;
+        const wb = XLSX.utils.book_new();
+        const monthName = getMonthName();
+        const departmentName = departmentSelect.value;
+        const title = departmentName ? `${monthName}${departmentName}考勤确认表` : `${monthName}考勤确认表`;
+        const aoa = [[title], ["北京大象和他的朋友们科技有限公司"], SUMMARY_HEADERS];
+
+        state.filteredEmployees.forEach((employee, index) => {
+          const m = employee.metrics;
+          aoa.push([
+            index + 1,
+            employee.department,
+            employee.name,
+            m.scheduledDays,
+            m.payDays,
+            m.mealDays,
+            m.sickHours,
+            m.personalHours,
+            m.absenceHours,
+            formatLate(m) === "0+0" ? "" : formatLate(m),
+            m.businessDays,
+            m.homeDays,
+            m.compHours,
+            m.annualHours,
+            m.marriageDays,
+            m.funeralDays,
+            m.maternityDays,
+            m.prenatalDays,
+            m.paternityDays,
+            m.childcareDays,
+            m.fullAttendance ? "是" : "",
+            "",
+            m.notes.slice(0, 5).join("；"),
+          ]);
+        });
+
+        const total = calcTotals(state.filteredEmployees);
+        aoa.push([
+          "",
+          "合计",
+          `${state.filteredEmployees.length}人`,
+          total.scheduledDays,
+          total.payDays,
+          total.mealDays,
+          total.sickHours,
+          total.personalHours,
+          total.absenceHours,
+          total.lateText,
+          total.businessDays,
+          total.homeDays,
+          total.compHours,
+          total.annualHours,
+          total.marriageDays,
+          total.funeralDays,
+          total.maternityDays,
+          total.prenatalDays,
+          total.paternityDays,
+          total.childcareDays,
+          `${total.fullAttendance}人`,
+          "",
+          "",
+        ]);
+
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+        ws["!merges"] = [
+          { s: { r: 0, c: 0 }, e: { r: 0, c: SUMMARY_HEADERS.length - 1 } },
+          { s: { r: 1, c: 0 }, e: { r: 1, c: SUMMARY_HEADERS.length - 1 } },
+        ];
+        ws["!cols"] = [7, 26, 13, 12, 12, 14, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 13, 14, 14, 10, 14, 38].map((wch) => ({ wch }));
+        applyPayrollFormulas(ws, state.filteredEmployees.length);
+        XLSX.utils.book_append_sheet(wb, ws, `${monthName || "当月"}考勤签字表`);
+        XLSX.writeFile(wb, `${safeFileName(departmentName || monthName || "当月")}考勤确认表.xlsx`);
+      }
+
+      function applyPayrollFormulas(ws, employeeCount) {
+        for (let i = 0; i < employeeCount; i += 1) {
+          const rowNumber = 4 + i;
+          const cellRef = `E${rowNumber}`;
+          const existing = ws[cellRef] || { t: "n", v: 0 };
+          ws[cellRef] = {
+            ...existing,
+            t: "n",
+            v: existing.v || 0,
+            f: `ROUND(D${rowNumber}-H${rowNumber}/8-I${rowNumber}/8,2)`,
+          };
+        }
+      }
+
+      function getPersonPeriodText() {
+        return state.period ? `每日统计 统计日期：${formatDate(state.period.start)} 至 ${formatDate(state.period.end)}` : "每日统计";
+      }
+
+      function canvasToBlob(canvas) {
+        return new Promise((resolve, reject) => {
+          if (canvas.toBlob) {
+            canvas.toBlob((blob) => {
+              if (blob) resolve(blob);
+              else reject(new Error("图片生成失败"));
+            }, "image/png");
+            return;
+          }
+
+          try {
+            const dataUrl = canvas.toDataURL("image/png");
+            const binary = atob(dataUrl.split(",")[1] || "");
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+            resolve(new Blob([bytes], { type: "image/png" }));
+          } catch (error) {
+            reject(error);
+          }
+        });
+      }
+
+      function blobToArrayBuffer(blob) {
+        if (blob.arrayBuffer) return blob.arrayBuffer();
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => reject(reader.error || new Error("图片读取失败"));
+          reader.readAsArrayBuffer(blob);
+        });
+      }
+
+      function drawRoundRect(ctx, x, y, width, height, radius, fill, stroke, lineWidth = 1) {
+        const r = Math.min(radius, width / 2, height / 2);
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.lineTo(x + width - r, y);
+        ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+        ctx.lineTo(x + width, y + height - r);
+        ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+        ctx.lineTo(x + r, y + height);
+        ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+        ctx.lineTo(x, y + r);
+        ctx.quadraticCurveTo(x, y, x + r, y);
+        ctx.closePath();
+        if (fill) {
+          ctx.fillStyle = fill;
+          ctx.fill();
+        }
+        if (stroke) {
+          ctx.strokeStyle = stroke;
+          ctx.lineWidth = lineWidth;
+          ctx.stroke();
+        }
+      }
+
+      function drawText(ctx, value, x, y, size, weight, color, family, align = "left") {
+        ctx.font = `${weight} ${size}px ${family}`;
+        ctx.fillStyle = color;
+        ctx.textAlign = align;
+        ctx.fillText(String(value ?? ""), x, y);
+      }
+
+      function drawFitText(ctx, value, x, y, maxWidth, size, weight, color, family) {
+        ctx.font = `${weight} ${size}px ${family}`;
+        let text = String(value ?? "");
+        if (!text) text = "-";
+        while (ctx.measureText(text).width > maxWidth && text.length > 2) {
+          text = `${text.slice(0, -2)}…`;
+        }
+        ctx.fillStyle = color;
+        ctx.textAlign = "left";
+        ctx.fillText(text, x, y);
+      }
+
+      function drawTableRow(ctx, x, y, colWidths, values, height, fill, stroke, color, family, bold) {
+        let cx = x;
+        colWidths.forEach((width, index) => {
+          ctx.fillStyle = fill;
+          ctx.fillRect(cx, y, width, height);
+          ctx.strokeStyle = stroke;
+          ctx.lineWidth = 1;
+          ctx.strokeRect(cx, y, width, height);
+          drawFitText(ctx, values[index], cx + 12, y + Math.max(8, Math.floor((height - 20) / 2)), width - 24, bold ? 18 : 16, bold ? 800 : 400, color, family);
+          cx += width;
+        });
+      }
+
+      function getSelectedEmployee() {
+        return state.employees.find((employee) => employee.name === state.selectedName) || null;
+      }
+
+      function formatLate(metrics) {
+        return `${metrics.lateWithin30 || 0}+${metrics.lateWithin60 || 0}`;
+      }
+
+      function formatLeaveAmount(metrics, item) {
+        return `${formatNumber(metrics[item.key])} ${item.unit}`;
+      }
+
+      function formatNumber(value) {
+        const number = Number(value || 0);
+        if (Number.isInteger(number)) return String(number);
+        return String(round2(number)).replace(/\.?0+$/, "");
+      }
+
+      function round2(value) {
+        return Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+      }
+
+      function cleanText(value) {
+        return String(value ?? "").replace(/\s+/g, " ").trim();
+      }
+
+      function formatDate(date) {
+        return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+      }
+
+      function formatDateTime(date) {
+        return `${formatDate(date)} ${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+      }
+
+      function getMonthName() {
+        return state.period ? `${state.period.start.getFullYear()}年${state.period.start.getMonth() + 1}月` : "";
+      }
+
+      function dateKey(date) {
+        return date ? formatDate(date) : "";
+      }
+
+      function pad2(value) {
+        return String(value).padStart(2, "0");
+      }
+
+      function safeFileName(value) {
+        return cleanText(value).replace(/[\\/:*?"<>|]/g, "_") || "员工";
+      }
+
+      function safePathSegment(value) {
+        return safeFileName(value).replace(/[. ]+$/g, "") || "未分类";
+      }
+
+      function safeSheetName(value) {
+        return safeFileName(value).slice(0, 31) || "Sheet1";
+      }
+
+      function getUniquePersonTemplateFileName(employee, used) {
+        return getUniquePersonOutputFileName(employee, used, "考勤确认模板.xlsx");
+      }
+
+      function getUniquePersonImageFileName(employee, used) {
+        return getUniquePersonOutputFileName(employee, used, "考勤确认模板.png");
+      }
+
+      function getUniquePersonOutputFileName(employee, used, suffix) {
+        const jobNo = cleanText(employee.rows[0]?.[COLS.jobNo]);
+        const title = cleanText(employee.title);
+        let stem = safeFileName(employee.name);
+        let fileName = `${stem}_${suffix}`;
+        if (used.has(fileName) && jobNo) {
+          stem = safeFileName(`${employee.name}_${jobNo}`);
+          fileName = `${stem}_${suffix}`;
+        } else if (used.has(fileName) && title) {
+          stem = safeFileName(`${employee.name}_${title}`);
+          fileName = `${stem}_${suffix}`;
+        }
+
+        let index = 2;
+        while (used.has(fileName)) {
+          fileName = `${stem}_${index}_${suffix}`;
+          index += 1;
+        }
+        used.add(fileName);
+        return fileName;
+      }
+
+      function downloadBlob(blob, fileName) {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 800);
+      }
+
+      function escapeHtml(value) {
+        return String(value ?? "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function escapeAttr(value) {
+        return escapeHtml(value).replace(/`/g, "&#96;");
+      }
+
+      function showToast(message) {
+        const toast = document.getElementById("toast");
+        toast.textContent = message;
+        toast.classList.add("show");
+        clearTimeout(showToast.timer);
+        showToast.timer = setTimeout(() => toast.classList.remove("show"), 3600);
+      }
+
+      function refreshIcons() {
+        if (window.lucide) window.lucide.createIcons();
+      }
+    </script>
+  </body>
+</html>

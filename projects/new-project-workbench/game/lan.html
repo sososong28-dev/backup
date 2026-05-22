@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex,nofollow" />
+    <meta name="theme-color" content="#07100c" />
+    <title>SharkCoach 本地联机</title>
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="stylesheet" href="./lan.css?v=1" />
+  </head>
+  <body>
+    <main class="lan-shell">
+      <header class="lan-topbar">
+        <div class="brand-lockup">
+          <div class="brand-mark" aria-hidden="true">S</div>
+          <div>
+            <p class="eyebrow">局域网联机</p>
+            <h1>本地多人牌桌</h1>
+          </div>
+        </div>
+        <div class="top-actions">
+          <a class="button" href="./">训练模式</a>
+          <button id="leaveRoomBtn" class="button ghost" type="button">离开房间</button>
+        </div>
+      </header>
+
+      <section id="setupPanel" class="setup-panel">
+        <div>
+          <p class="eyebrow">开桌</p>
+          <h2>创建或加入同一 Wi-Fi 下的牌局</h2>
+        </div>
+        <div class="setup-grid">
+          <label>
+            <span class="label">昵称</span>
+            <input id="nicknameInput" maxlength="14" placeholder="例如 Song" autocomplete="off" />
+          </label>
+          <label>
+            <span class="label">房间名</span>
+            <input id="roomNameInput" maxlength="18" placeholder="今晚训练桌" autocomplete="off" />
+          </label>
+          <label>
+            <span class="label">人数上限</span>
+            <select id="maxPlayersSelect">
+              <option value="2">2 人桌</option>
+              <option value="3">3 人桌</option>
+              <option value="4">4 人桌</option>
+              <option value="5" selected>5 人桌</option>
+            </select>
+          </label>
+          <button id="createRoomBtn" class="button primary" type="button">创建房间</button>
+          <label class="join-code">
+            <span class="label">房间码</span>
+            <input id="roomCodeInput" maxlength="8" placeholder="输入房间码" autocomplete="off" />
+          </label>
+          <button id="joinRoomBtn" class="button action" type="button">加入房间</button>
+        </div>
+        <p id="statusText" class="status-text">联机数据只保存在当前服务内存里，刷新可重连，服务重启会清空房间。</p>
+      </section>
+
+      <section id="roomPanel" class="room-panel" hidden>
+        <div class="room-info">
+          <div>
+            <p class="eyebrow">房间</p>
+            <h2 id="roomNameLabel">本地牌桌</h2>
+          </div>
+          <div class="room-code-box">
+            <span>房间码</span>
+            <strong id="roomCodeLabel">------</strong>
+            <button id="copyRoomLinkBtn" class="mini-button" type="button">复制链接</button>
+          </div>
+        </div>
+
+        <div class="round-strip">
+          <div>
+            <span class="label">当前街</span>
+            <strong id="streetLabel">等待开局</strong>
+          </div>
+          <div>
+            <span class="label">底池</span>
+            <strong id="potLabel">0 BB</strong>
+          </div>
+          <div>
+            <span class="label">当前行动</span>
+            <strong id="actorLabel">--</strong>
+          </div>
+          <div>
+            <span class="label">牌局号</span>
+            <strong id="handLabel">#0</strong>
+          </div>
+        </div>
+
+        <section class="lan-table" aria-label="本地联机牌桌">
+          <div id="seatGrid" class="seat-grid"></div>
+          <div class="felt-center">
+            <div class="pot-chip">
+              <span>底池</span>
+              <strong id="centerPotLabel">0 BB</strong>
+            </div>
+            <div id="boardCards" class="card-row board-row" aria-label="公共牌"></div>
+          </div>
+          <article id="heroPanel" class="hero-panel">
+            <div>
+              <span id="youBadge" class="score-pill">你的座位</span>
+              <strong id="heroNameLabel">未加入</strong>
+              <small id="heroHintLabel">创建或加入房间后开始</small>
+            </div>
+            <div id="heroCards" class="card-row hero-cards"></div>
+          </article>
+        </section>
+
+        <p id="settlementLabel" class="settlement-label"></p>
+        <ol id="roomLog" class="room-log"></ol>
+      </section>
+
+      <section class="lan-controls" aria-label="联机操作">
+        <button id="startHandBtn" class="button primary" type="button">开始一手</button>
+        <button id="checkCallBtn" class="button secondary" type="button">过牌</button>
+        <button id="betRaiseBtn" class="button action" type="button">下注</button>
+        <button id="foldBtn" class="button ghost" type="button">弃牌</button>
+        <button id="allInBtn" class="button danger" type="button">全下</button>
+        <div class="raise-control">
+          <span>尺度</span>
+          <input id="raiseSlider" type="range" min="2" max="24" value="6" />
+          <strong id="raiseAmount">6 BB</strong>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="./lan.js?v=1"></script>
+  </body>
+</html>

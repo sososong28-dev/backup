@@ -1,0 +1,110 @@
+{
+  "database_path": "data/wdt_enterprise.sqlite",
+  "inbox_dir": "exports/inbox",
+  "archive_dir": "exports/archive",
+  "error_dir": "exports/error",
+  "archive_after_import": true,
+  "default_encoding": "utf-8-sig",
+  "export_types": {
+    "goods": {
+      "file_patterns": ["商品", "货品", "产品", "goods", "item", "sku"],
+      "mapping": {
+        "sku_key": ["商家编码", "规格编码", "货品编码", "SKU", "sku", "sku编码"],
+        "goods_no": ["货品编号", "货品编码", "商品编号", "商品编码"],
+        "spec_no": ["规格编码", "商家编码", "SKU编码"],
+        "barcode": ["条形码", "条码", "barcode"],
+        "goods_name": ["货品名称", "商品名称", "产品名称", "名称"],
+        "spec_name": ["规格名称", "规格", "属性"],
+        "category_name": ["分类", "分类名称", "货品分类", "商品分类"],
+        "brand_name": ["品牌", "品牌名称"]
+      }
+    },
+    "orders": {
+      "file_patterns": ["订单", "销售", "交易", "trade", "order"],
+      "mapping": {
+        "trade_no": ["订单编号", "系统订单号", "旺店通单号", "订单号", "交易编号"],
+        "src_tid": ["原始单号", "平台单号", "网店订单号", "线上订单号"],
+        "shop_no": ["店铺编号", "店铺编码"],
+        "shop_name": ["店铺", "店铺名称", "网店名称"],
+        "platform_name": ["平台", "平台名称"],
+        "trade_status": ["订单状态", "状态", "处理状态"],
+        "trade_time": ["下单时间", "订单时间", "创建时间"],
+        "pay_time": ["付款时间", "支付时间"],
+        "buyer_nick": ["买家昵称", "客户网名", "买家账号"],
+        "receiver_name": ["收件人", "收货人"],
+        "receiver_mobile_masked": ["手机", "手机号", "收件人手机", "收货人手机"],
+        "goods_amount": ["货品总额", "商品金额", "货款"],
+        "post_amount": ["邮费", "运费"],
+        "paid_amount": ["实付金额", "已付金额", "应收金额", "订单金额"],
+        "item_id": ["明细编号", "子订单编号", "订单明细编号"],
+        "sku_key": ["商家编码", "规格编码", "货品编码", "SKU", "sku"],
+        "goods_no": ["货品编号", "商品编号", "商品编码"],
+        "spec_no": ["规格编码", "商家编码"],
+        "barcode": ["条形码", "条码"],
+        "goods_name": ["货品名称", "商品名称", "产品名称"],
+        "spec_name": ["规格名称", "规格"],
+        "goods_count": ["数量", "购买数量", "货品数量"],
+        "price": ["单价", "成交价"],
+        "discount_amount": ["优惠金额", "折扣金额"],
+        "item_paid_amount": ["明细实付", "分摊后金额", "货品实付"]
+      }
+    },
+    "order_items": {
+      "file_patterns": ["订单明细", "销售明细", "货品明细", "trade_item", "order_item"],
+      "mapping": {
+        "trade_no": ["订单编号", "系统订单号", "旺店通单号", "订单号", "交易编号"],
+        "item_id": ["明细编号", "子订单编号", "订单明细编号"],
+        "sku_key": ["商家编码", "规格编码", "货品编码", "SKU", "sku"],
+        "goods_no": ["货品编号", "商品编号", "商品编码"],
+        "spec_no": ["规格编码", "商家编码"],
+        "barcode": ["条形码", "条码"],
+        "goods_name": ["货品名称", "商品名称", "产品名称"],
+        "spec_name": ["规格名称", "规格"],
+        "goods_count": ["数量", "购买数量", "货品数量"],
+        "price": ["单价", "成交价"],
+        "discount_amount": ["优惠金额", "折扣金额"],
+        "paid_amount": ["实付金额", "分摊后金额", "货品实付"]
+      }
+    },
+    "stock": {
+      "file_patterns": ["库存", "库存查询", "库存明细", "stock", "inventory"],
+      "mapping": {
+        "snapshot_date": ["日期", "库存日期", "统计日期"],
+        "warehouse_no": ["仓库编号", "仓库编码"],
+        "warehouse_name": ["仓库", "仓库名称"],
+        "sku_key": ["商家编码", "规格编码", "货品编码", "SKU", "sku"],
+        "goods_no": ["货品编号", "商品编号", "商品编码"],
+        "spec_no": ["规格编码", "商家编码"],
+        "barcode": ["条形码", "条码"],
+        "goods_name": ["货品名称", "商品名称", "产品名称"],
+        "spec_name": ["规格名称", "规格"],
+        "stock_qty": ["库存量", "库存数量", "实际库存", "总库存"],
+        "available_qty": ["可发库存", "可用库存", "可销售库存"],
+        "occupy_qty": ["占用库存", "锁定库存"]
+      }
+    },
+    "refunds": {
+      "file_patterns": ["退款", "退货", "售后", "refund", "aftersale"],
+      "mapping": {
+        "refund_no": ["退款单号", "售后单号", "退货单号"],
+        "trade_no": ["订单编号", "系统订单号", "旺店通单号", "订单号", "交易编号"],
+        "shop_no": ["店铺编号", "店铺编码"],
+        "shop_name": ["店铺", "店铺名称", "网店名称"],
+        "platform_name": ["平台", "平台名称"],
+        "refund_status": ["售后状态", "退款状态", "状态"],
+        "refund_time": ["退款时间", "售后时间", "创建时间"],
+        "refund_amount": ["退款金额", "退货金额", "应退金额"],
+        "reason": ["退款原因", "售后原因", "原因"]
+      }
+    },
+    "shops": {
+      "file_patterns": ["店铺", "网店", "shop"],
+      "mapping": {
+        "shop_no": ["店铺编号", "店铺编码"],
+        "shop_name": ["店铺", "店铺名称", "网店名称"],
+        "platform_name": ["平台", "平台名称"]
+      }
+    }
+  }
+}
+

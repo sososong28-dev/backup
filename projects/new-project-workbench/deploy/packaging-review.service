@@ -1,0 +1,18 @@
+[Unit]
+Description=Packaging Review Sync
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/var/www/packaging-review
+ExecStart=/usr/bin/node /var/www/packaging-review/server.mjs
+Environment=HOST=127.0.0.1
+Environment=PORT=4180
+Environment=PACKAGING_REVIEW_STATE_DIR=/var/lib/packaging-review
+Restart=always
+RestartSec=3
+User=www-data
+Group=www-data
+
+[Install]
+WantedBy=multi-user.target

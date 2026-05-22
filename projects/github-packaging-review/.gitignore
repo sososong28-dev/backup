@@ -1,0 +1,9 @@
+node_modules/
+data/
+logs/
+output/
+test-results/
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
