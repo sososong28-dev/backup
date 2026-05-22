@@ -25,21 +25,15 @@ jobs:
           git fetch --depth=1 origin main
           git checkout -B main FETCH_HEAD
 
-          echo "Downloading backup archive"
+          echo "Downloading portable backup archive parts"
           mkdir -p /tmp/backup-parts /tmp/github-backup-extract
-          if curl -L --fail --retry 3 --retry-delay 5 -o /tmp/github-backup.zip "https://litter.catbox.moe/wg0pft.zip"; then
-            echo "Downloaded backup ZIP from Litterbox"
-          else
-            echo "Single ZIP download failed; falling back to tmpfiles parts"
-            curl -L --fail --retry 5 --retry-delay 5 -o /tmp/backup-parts/part-000.bin "https://tmpfiles.org/dl/w9wJgca0AxOT/part-000.bin"
-            curl -L --fail --retry 5 --retry-delay 5 -o /tmp/backup-parts/part-001.bin "https://tmpfiles.org/dl/wOwlgganfFCC/part-001.bin"
-            curl -L --fail --retry 5 --retry-delay 5 -o /tmp/backup-parts/part-002.bin "https://tmpfiles.org/dl/wSwvg6a8gk79/part-002.bin"
-            curl -L --fail --retry 5 --retry-delay 5 -o /tmp/backup-parts/part-003.bin "https://tmpfiles.org/dl/wlwbgmakgJXC/part-003.bin"
-            cat /tmp/backup-parts/part-000.bin /tmp/backup-parts/part-001.bin /tmp/backup-parts/part-002.bin /tmp/backup-parts/part-003.bin > /tmp/github-backup.zip
-          fi
-
+          curl -L --fail --retry 5 --retry-delay 5 -o /tmp/backup-parts/part-000.bin "https://tmpfiles.org/dl/wawygla4kWp1/part-000.bin"
+          curl -L --fail --retry 5 --retry-delay 5 -o /tmp/backup-parts/part-001.bin "https://tmpfiles.org/dl/wAwXgpaVP0XS/part-001.bin"
+          curl -L --fail --retry 5 --retry-delay 5 -o /tmp/backup-parts/part-002.bin "https://tmpfiles.org/dl/wMw8gUaDqLEj/part-002.bin"
+          curl -L --fail --retry 5 --retry-delay 5 -o /tmp/backup-parts/part-003.bin "https://tmpfiles.org/dl/wawbgAaxNN6O/part-003.bin"
+          cat /tmp/backup-parts/part-000.bin /tmp/backup-parts/part-001.bin /tmp/backup-parts/part-002.bin /tmp/backup-parts/part-003.bin > /tmp/github-backup.zip
           ls -lh /tmp/github-backup.zip
-          echo "3534e586c3f68f8fccc51ae04e2cc4a0c4afb1763d88675c833b5e5e14066d87  /tmp/github-backup.zip" | sha256sum -c -
+          echo "3fb66d25ba39025550827ab7f1dc9d2e7b368485c8b6297c69c3639183c472f6  /tmp/github-backup.zip" | sha256sum -c -
 
           echo "Extracting and copying backup"
           unzip -q /tmp/github-backup.zip -d /tmp/github-backup-extract
