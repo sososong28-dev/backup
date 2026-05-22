@@ -1,0 +1,60 @@
+name: Import Categorized Backup
+
+on:
+  push:
+    paths:
+      - .github/workflows/import-backup.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  import-backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Download backup archive parts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/backup-parts
+          curl -L --fail --retry 5 --retry-delay 5 -o /tmp/backup-parts/part-000.bin "https://tmpfiles.org/dl/w9wJgca0AxOT/part-000.bin"
+          curl -L --fail --retry 5 --retry-delay 5 -o /tmp/backup-parts/part-001.bin "https://tmpfiles.org/dl/wOwlgganfFCC/part-001.bin"
+          curl -L --fail --retry 5 --retry-delay 5 -o /tmp/backup-parts/part-002.bin "https://tmpfiles.org/dl/wSwvg6a8gk79/part-002.bin"
+          curl -L --fail --retry 5 --retry-delay 5 -o /tmp/backup-parts/part-003.bin "https://tmpfiles.org/dl/wlwbgmakgJXC/part-003.bin"
+          cat /tmp/backup-parts/part-000.bin /tmp/backup-parts/part-001.bin /tmp/backup-parts/part-002.bin /tmp/backup-parts/part-003.bin > /tmp/github-backup.zip
+          echo "3534e586c3f68f8fccc51ae04e2cc4a0c4afb1763d88675c833b5e5e14066d87  /tmp/github-backup.zip" | sha256sum -c -
+
+      - name: Extract archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/github-backup-extract
+          mkdir -p /tmp/github-backup-extract
+          unzip -q /tmp/github-backup.zip -d /tmp/github-backup-extract
+
+      - name: Import extracted files
+        shell: bash
+        run: |
+          set -euo pipefail
+          rsync -a --delete --exclude='.git/' --exclude='.github/' /tmp/github-backup-extract/ ./
+          git status --short
+
+      - name: Commit imported backup
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No backup changes to commit."
+          else
+            git commit -m "Import categorized project backup"
+            git push
+          fi
