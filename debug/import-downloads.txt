@@ -1,0 +1,62 @@
+Generated at: 2026-05-22T14:41:59Z
+
+== litterbox full zip HEAD ==
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
+HTTP/2 405 
+date: Fri, 22 May 2026 14:42:00 GMT
+content-type: text/html; charset=utf-8
+content-security-policy: default-src 'none'; script-src 'strict-dynamic' 'nonce-spkkX0fkzycOkkMPbhcXnSu9kflCvGpp'; style-src 'nonce-K8ALigG48Jnm8lkN2RoktovUOzRkVAiu'; frame-ancestors 'none'; base-uri 'none'; img-src data:; font-src data:; require-trusted-types-for 'script'; upgrade-insecure-requests;
+strict-transport-security: max-age=31536000; includeSubDomains; preload
+x-content-type-options: nosniff
+referrer-policy: no-referrer
+permissions-policy: accelerometer=(), ambient-light-sensor=(), attribution-reporting=(), autoplay=(), battery=(), bluetooth=(), browsing-topics=(), camera=(), compute-pressure=(), display-capture=(), encrypted-media=(), execution-while-not-rendered=(), execution-while-out-of-viewport=(), fullscreen=(), gamepad=(), geolocation=(), gyroscope=(), hid=(), identity-credentials-get=(), idle-detection=(), local-fonts=(), magnetometer=(), microphone=(), midi=(), otp-credentials=(), payment=(), picture-in-picture=(), publickey-credentials-create=(), publickey-credentials-get=(), screen-wake-lock=(), serial=(), speaker-selection=(), storage-access=(), usb=(), web-share=(), window-management=(), xr-spatial-tracking=(), interest-cohort=()
+cache-control: no-cache, no-store, must-revalidate
+x-dns-prefetch-control: off
+x-frame-options: SAMEORIGIN
+
+exit=0
+
+== litterbox full zip first byte ==
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0100     1  100     1    0     0      5      0 --:--:-- --:--:-- --:--:--     5
+http=206 size=1 time=0.193120
+exit=0
+-rw-r--r-- 1 runner runner 1 May 22 14:42 /tmp/litter-first-byte.bin
+
+== tmpfiles part 000 first byte ==
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0100     1  100     1    0     0      2      0 --:--:-- --:--:-- --:--:--     2
+http=206 size=1 time=0.464573
+exit=0
+-rw-r--r-- 1 runner runner 1 May 22 14:42 /tmp/tmpfiles-first-byte.bin
+
+== gofile page HEAD ==
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0 11837    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
+HTTP/2 200 
+server: nginx
+date: Fri, 22 May 2026 14:42:01 GMT
+content-type: text/html; charset=UTF-8
+content-length: 11837
+x-dns-prefetch-control: off
+expect-ct: max-age=0
+x-frame-options: SAMEORIGIN
+strict-transport-security: max-age=15552000; includeSubDomains
+x-download-options: noopen
+x-content-type-options: nosniff
+origin-agent-cluster: ?1
+x-permitted-cross-domain-policies: none
+referrer-policy: origin
+x-xss-protection: 0
+cache-control: public, max-age=0
+last-modified: Fri, 17 Apr 2026 18:42:30 GMT
+etag: W/"2e3d-19d9cc06ec3"
+strict-transport-security: max-age=63072000; includeSubDomains
+x-robots-tag: all
+
+exit=0
