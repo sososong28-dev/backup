@@ -1,0 +1,57 @@
+name: Debug Backup Downloads
+
+on:
+  push:
+    paths:
+      - .github/workflows/debug-downloads.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  debug-downloads:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Probe download URLs and commit report
+        shell: bash
+        run: |
+          set +e
+          mkdir -p debug
+          report="debug/import-downloads.txt"
+          {
+            echo "Generated at: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo
+            echo "== litterbox full zip HEAD =="
+            curl -I -L --max-time 30 "https://litter.catbox.moe/wg0pft.zip"
+            echo "exit=$?"
+            echo
+            echo "== litterbox full zip first byte =="
+            curl -L --max-time 60 --range 0-0 --output /tmp/litter-first-byte.bin --write-out 'http=%{http_code} size=%{size_download} time=%{time_total}\n' "https://litter.catbox.moe/wg0pft.zip"
+            echo "exit=$?"
+            ls -l /tmp/litter-first-byte.bin 2>/dev/null
+            echo
+            echo "== tmpfiles part 000 first byte =="
+            curl -L --max-time 60 --range 0-0 --output /tmp/tmpfiles-first-byte.bin --write-out 'http=%{http_code} size=%{size_download} time=%{time_total}\n' "https://tmpfiles.org/dl/w9wJgca0AxOT/part-000.bin"
+            echo "exit=$?"
+            ls -l /tmp/tmpfiles-first-byte.bin 2>/dev/null
+            echo
+            echo "== gofile page HEAD =="
+            curl -I -L --max-time 30 "https://gofile.io/d/ZCvwDL"
+            echo "exit=$?"
+          } > "$report" 2>&1
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$report"
+          if git diff --cached --quiet; then
+            echo "No debug report changes."
+          else
+            git commit -m "Add backup download diagnostics"
+            git push
+          fi
